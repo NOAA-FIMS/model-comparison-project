@@ -14,7 +14,8 @@
       //devtools, usethis, and pak contain utilities for r package development.
       "packages": "cli,rlang,devtools,usethis,pak",
       "installSystemRequirements": true
-    }
+    },
+    "ghcr.io/rocker-org/devcontainer-features/quarto-cli:1": {}
   },
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
   // "forwardPorts": [],
@@ -31,7 +32,8 @@
       //rendered to HTML
       "extensions": [
         "ms-vsliveshare.vsliveshare",
-        "george-alisson.html-preview-vscode"
+        "george-alisson.html-preview-vscode",
+        "quarto.quarto"
       ]
     } // vscode
   } // customizations
