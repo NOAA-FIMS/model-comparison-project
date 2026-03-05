@@ -1,4 +1,4 @@
-#' Tidyverse plotting functions for SSB, Recruitment, and F
+#' Tidyverse plotting functions for SSB, Recruitment, Abundance, and F
 #' Supports: ASAP, BAM, SS, WHAM (fixed/random), FIMS (fixed/random)
 #' 
 #' @author Model Comparison Project
@@ -16,7 +16,7 @@ model_colors <- c(
   "FIMS_random_effects" = "#CC7700"   # Dark orange
 )
 
-#' Read SB, recruitment, and F data in tidy format
+#' Read SB, recruitment, abundance, and F data in tidy format
 #'
 #' @param main_dir Case directory path
 #' @param em_names Estimation model names
@@ -55,10 +55,11 @@ read_ssb_r_f_data <- function(
       year = seq_len(env[["om_input"]][["nyr"]]),
       spawning_biomass = env[["om_output"]][["SSB"]],
       recruitment = env[["om_output"]][["N.age"]][, 1] / 1000,
+      abundance = rowSums(env[["om_output"]][["N.age"]]) / 1000,
       fishing_mortality = apply(env[["om_output"]][["FAA"]], 1, max)
     ) |>
       tidyr::pivot_longer(
-        cols = c(spawning_biomass, recruitment, fishing_mortality),
+        cols = c(spawning_biomass, recruitment, abundance, fishing_mortality),
         names_to = "metric",
         values_to = "value"
       )
@@ -88,10 +89,11 @@ read_ssb_r_f_data <- function(
         year = seq_along(asap_output[["SSB"]]),
         spawning_biomass = asap_output[["SSB"]],
         recruitment = asap_output[["N.age"]][, 1],
+        abundance = rowSums(asap_output[["N.age"]]),
         fishing_mortality = apply(asap_output[["fleet.FAA"]][["FAA.directed.fleet1"]], 1, max)
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, fishing_mortality),
+          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality),
           names_to = "metric",
           values_to = "value"
         )
@@ -116,10 +118,11 @@ read_ssb_r_f_data <- function(
         year = seq_len(nyr),
         spawning_biomass = bam_output[["t.series"]][["SSB"]][1:nyr],
         recruitment = bam_output[["t.series"]][["recruits"]][1:nyr] / 1000,
+        abundance = rowSums(bam_output[["N.age"]][1:nyr, ]) / 1000,
         fishing_mortality = bam_output[["t.series"]][["F.full"]][1:nyr]
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, fishing_mortality),
+          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality),
           names_to = "metric",
           values_to = "value"
         )
@@ -145,6 +148,9 @@ read_ssb_r_f_data <- function(
       ss_natage <- ss_output[["natage_annual_2_with_fishery"]] |>
         dplyr::filter(Yr >= min(year_range), Yr <= max(year_range))
       
+      # Sum abundance across ages (columns 5 onwards are age classes)
+      abundance_ss <- rowSums(ss_natage[, 5:ncol(ss_natage)])
+      
       tibble::tibble(
         case = case_name,
         model = "SS",
@@ -152,10 +158,11 @@ read_ssb_r_f_data <- function(
         year = seq_along(ss_ts[["SpawnBio"]]),
         spawning_biomass = ss_ts[["SpawnBio"]],
         recruitment = ss_natage[[5]],
+        abundance = abundance_ss,
         fishing_mortality = ss_ts[["F:_1"]]
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, fishing_mortality),
+          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality),
           names_to = "metric",
           values_to = "value"
         )
@@ -173,6 +180,9 @@ read_ssb_r_f_data <- function(
       # Extract F from FAA (fishing mortality at age)
       f_mort <- exp(fit_wham[["rep"]][["log_F_tot"]])
       
+      # Extract total abundance (sum across ages)
+      abundance_wham <- apply(fit_wham[["rep"]][["NAA"]][1, 1, , ], 1, sum)
+      
       tibble::tibble(
         case = case_name,
         model = "WHAM_fixed_effects",
@@ -180,10 +190,11 @@ read_ssb_r_f_data <- function(
         year = seq_along(fit_wham[["rep"]][["SSB"]]),
         spawning_biomass = fit_wham[["rep"]][["SSB"]],
         recruitment = fit_wham[["rep"]][["NAA"]][1, 1, , 1],
+        abundance = abundance_wham,
         fishing_mortality = f_mort
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, fishing_mortality),
+          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality),
           names_to = "metric",
           values_to = "value"
         )
@@ -199,6 +210,9 @@ read_ssb_r_f_data <- function(
       # Extract F from FAA (fishing mortality at age)
       f_mort <- exp(fit_wham[["rep"]][["log_F_tot"]])
       
+      # Extract total abundance (sum across ages)
+      abundance_wham <- apply(fit_wham[["rep"]][["NAA"]][1, 1, , ], 1, sum)
+      
       tibble::tibble(
         case = case_name,
         model = "WHAM_random_effects",
@@ -206,10 +220,11 @@ read_ssb_r_f_data <- function(
         year = seq_along(fit_wham[["rep"]][["SSB"]]),
         spawning_biomass = fit_wham[["rep"]][["SSB"]],
         recruitment = fit_wham[["rep"]][["NAA"]][1, 1, , 1],
+        abundance = abundance_wham,
         fishing_mortality = f_mort
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, fishing_mortality),
+          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality),
           names_to = "metric",
           values_to = "value"
         )
@@ -223,8 +238,6 @@ read_ssb_r_f_data <- function(
       if (!file.exists(rds_file)) return(NULL)
       
       fims_output <- readRDS(rds_file)
-        # TODO: remove the code below because run_fims() will return estimates instead of a full fit
-        # FIMS::get_estimates()
       
       # Get year range from first OM file
       env <- new.env()
@@ -250,6 +263,14 @@ read_ssb_r_f_data <- function(
         dplyr::pull(estimated) |>
         exp()
       
+      # Extract total abundance (numbers at age)
+      abundance_fims <- fims_output |>
+        dplyr::filter(label == "numbers_at_age", year_i %in% 1:nyr) |>
+        dplyr::group_by(year_i) |>
+        dplyr::summarize(total = sum(estimated), .groups = "drop") |>
+        dplyr::arrange(year_i) |>
+        dplyr::pull(total) / 1000
+      
       tibble::tibble(
         case = case_name,
         model = "FIMS_fixed_effects",
@@ -257,10 +278,11 @@ read_ssb_r_f_data <- function(
         year = 1:nyr,
         spawning_biomass = sb_data,
         recruitment = recruit_data,
+        abundance = abundance_fims,
         fishing_mortality = f_data
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, fishing_mortality),
+          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality),
           names_to = "metric",
           values_to = "value"
         )
@@ -299,6 +321,21 @@ read_ssb_r_f_data <- function(
         dplyr::pull(Estimate) |>
         exp()
       
+      # Extract total abundance (sum across ages per year)
+      # numbers_at_age contains all ages for each year sequentially (e.g., ages 1-12 for year 1, then ages 1-12 for year 2, etc.)
+      naa_data <- fims_output |>
+        dplyr::filter(label == "numbers_at_age")
+      
+      n_ages <- env[["om_input"]][["nages"]]
+      
+      abundance_fims <- naa_data |>
+        dplyr::mutate(year_index = rep(1: (nyr+1), each = n_ages)) |>
+        dplyr::group_by(year_index) |>
+        dplyr::summarize(total = sum(Estimate), .groups = "drop") |>
+        dplyr::slice(1:nyr) |>
+        dplyr::pull(total) / 1000
+        
+      
       tibble::tibble(
         case = case_name,
         model = "FIMS_random_effects",
@@ -306,10 +343,11 @@ read_ssb_r_f_data <- function(
         year = 1:nyr,
         spawning_biomass = sb_data,
         recruitment = recruit_data,
+        abundance = abundance_fims,
         fishing_mortality = f_data
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, fishing_mortality),
+          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality),
           names_to = "metric",
           values_to = "value"
         )
@@ -381,10 +419,10 @@ calc_summary_stats <- function(data) {
     )
 }
 
-#' Plot SSB, recruitment, or F with uncertainty
+#' Plot SSB, recruitment, abundance, or F with uncertainty
 #'
 #' @param summary_data Summary statistics data
-#' @param metric_name Metric to plot ("spawning_biomass", "recruitment", or "fishing_mortality")
+#' @param metric_name Metric to plot ("spawning_biomass", "recruitment", "abundance", or "fishing_mortality")
 #' @param facet_by Facet by "model", "case", or NULL
 #' @param include_om Include OM as background
 #' @return ggplot object
@@ -427,6 +465,7 @@ plot_metric <- function(summary_data,
   y_labels <- c(
     spawning_biomass = "Spawning Stock Biomass (mt)",
     recruitment = "Recruitment (×1000 fish)",
+    abundance = "Total Abundance (×1000 fish)",
     fishing_mortality = "Fishing Mortality (F)"
   )
   
@@ -565,6 +604,172 @@ calculate_mre_summary <- function(re_data) {
   return(mre_summary)
 }
 
+#' Calculate median absolute relative error summary table
+#'
+#' @param re_data Relative error data from calculate_relative_errors()
+#' @return Tibble with MARE by case, model, and metric
+#' @details Calculates median of absolute relative errors across all years and simulations.
+#'   This follows the approach: median(ARE across all years and simulations) for each case-model-metric.
+calculate_mare_summary <- function(re_data) {
+  
+  if (is.null(re_data) || nrow(re_data) == 0) {
+    return(NULL)
+  }
+  
+  # Calculate median ARE across all years and simulations
+  mare_summary <- re_data |>
+    dplyr::group_by(case, model, metric) |>
+    dplyr::summarize(
+      mare = stats::median(are, na.rm = TRUE),
+      mare_lower = median_ci_binomial(are)["lower"],
+      mare_upper = median_ci_binomial(are)["upper"],
+      mean_are = mean(are, na.rm = TRUE),
+      sd_are = stats::sd(are, na.rm = TRUE),
+      n_obs = dplyr::n(),
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(
+      model = factor(model, levels = c("ASAP", "BAM", "SS", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")),
+      mare = round(mare, 2),
+      mare_lower = round(mare_lower, 2),
+      mare_upper = round(mare_upper, 2),
+      mean_are = round(mean_are, 2),
+      sd_are = round(sd_are, 2)
+    ) |>
+    dplyr::arrange(case, metric, model)
+  
+  return(mare_summary)
+}
+
+#' Create summed metric comparison tables by iteration
+#'
+#' @param all_data Tidy data frame with OM and EM outputs
+#' @param metrics Vector of metrics to include (default: c("spawning_biomass", "abundance"))
+#' @return List of data frames, one per metric, with simulations as rows and models as columns
+#' @details Calculates relative error on summed values: (EM_sum - OM_sum) / OM_sum * 100.
+#'   Each value represents the relative error of the total (summed across all years) for that metric.
+create_summed_metric_tables <- function(all_data, 
+                                        metrics = c("spawning_biomass", "abundance")) {
+  
+  if (is.null(all_data) || nrow(all_data) == 0) {
+    warning("No data provided for summed metric tables")
+    return(NULL)
+  }
+  
+  # Define model ordering (excluding OM for RE calculation)
+  model_order <- c("ASAP", "BAM", "SS", "WHAM_fixed_effects", "WHAM_random_effects", 
+                   "FIMS_fixed_effects", "FIMS_random_effects")
+  
+  summed_tables <- list()
+  
+  for (metric_name in metrics) {
+    # Sum across years for each simulation-model combination
+    summed_data <- all_data |>
+      dplyr::filter(metric == metric_name) |>
+      dplyr::group_by(case, model, simulation) |>
+      dplyr::summarize(
+        total = sum(value, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    # Separate OM and EM data
+    om_summed <- summed_data |>
+      dplyr::filter(model == "OM") |>
+      dplyr::select(case, simulation, om_total = total)
+    
+    em_summed <- summed_data |>
+      dplyr::filter(model != "OM")
+    
+    # Calculate relative errors on summed values
+    re_summed <- em_summed |>
+      dplyr::left_join(om_summed, by = c("case", "simulation")) |>
+      dplyr::mutate(
+        re_percent = (total - om_total) / om_total * 100,
+        model = factor(model, levels = model_order)
+      ) |>
+      dplyr::select(case, simulation, model, re_percent) |>
+      dplyr::arrange(case, simulation, model) |>
+      dplyr::mutate(re_percent = round(re_percent, 2))
+    
+    # Pivot to wide format: simulations as rows, models as columns
+    wide_table <- re_summed |>
+      tidyr::pivot_wider(
+        id_cols = c(case, simulation),
+        names_from = model,
+        values_from = re_percent
+      ) |>
+      dplyr::arrange(case, simulation)
+    
+    summed_tables[[metric_name]] <- wide_table
+  }
+  
+  return(summed_tables)
+}
+
+#' Calculate summary statistics from summed metric tables
+#'
+#' @param summed_tables List of summed metric tables from create_summed_metric_tables()
+#' @return Tibble with mean, median, SD, and other statistics for each model and metric
+#' @details Calculates summary statistics across all iterations for the relative errors
+#'   on summed values.
+summarize_summed_metric_tables <- function(summed_tables) {
+  
+  if (is.null(summed_tables) || length(summed_tables) == 0) {
+    warning("No summed tables provided")
+    return(NULL)
+  }
+  
+  summary_list <- list()
+  
+  for (metric_name in names(summed_tables)) {
+    table <- summed_tables[[metric_name]]
+    
+    # Get model columns (exclude case and simulation)
+    model_cols <- setdiff(names(table), c("case", "simulation"))
+    
+    # Calculate summary statistics for each model
+    summary_data <- purrr::map_dfr(model_cols, function(model_name) {
+      values <- table[[model_name]]
+      
+      tibble::tibble(
+        case = unique(table$case),
+        metric = metric_name,
+        model = model_name,
+        mean_re = mean(values, na.rm = TRUE),
+        median_re = stats::median(values, na.rm = TRUE),
+        median_lower = median_ci_binomial(values)["lower"],
+        median_upper = median_ci_binomial(values)["upper"],
+        sd_re = stats::sd(values, na.rm = TRUE),
+        min_re = min(values, na.rm = TRUE),
+        max_re = max(values, na.rm = TRUE),
+        q25 = stats::quantile(values, 0.25, na.rm = TRUE),
+        q75 = stats::quantile(values, 0.75, na.rm = TRUE),
+        n_sims = sum(!is.na(values))
+      )
+    })
+    
+    summary_list[[metric_name]] <- summary_data |>
+      dplyr::mutate(
+        model = factor(model, levels = c("ASAP", "BAM", "SS", "WHAM_fixed_effects", 
+                                         "WHAM_random_effects", "FIMS_fixed_effects", 
+                                         "FIMS_random_effects")),
+        mean_re = round(mean_re, 2),
+        median_re = round(median_re, 2),
+        median_lower = round(median_lower, 2),
+        median_upper = round(median_upper, 2),
+        sd_re = round(sd_re, 2),
+        min_re = round(min_re, 2),
+        max_re = round(max_re, 2),
+        q25 = round(q25, 2),
+        q75 = round(q75, 2)
+      ) |>
+      dplyr::arrange(model)
+  }
+  
+  # Combine all metrics
+  dplyr::bind_rows(summary_list)
+}
+
 #' Plot relative error boxplots over time by model
 #'
 #' @param re_data Relative error data (with RE in percentage)
@@ -585,6 +790,7 @@ plot_re_boxplot_by_year <- function(re_data, metric_filter = "spawning_biomass")
       metric_label = dplyr::case_when(
         metric == "spawning_biomass" ~ "Spawning Biomass",
         metric == "recruitment" ~ "Recruitment",
+        metric == "abundance" ~ "Total Abundance",
         metric == "fishing_mortality" ~ "Fishing Mortality",
         TRUE ~ metric
       )
@@ -634,6 +840,7 @@ plot_re_violin <- function(re_data, metric_filter = "spawning_biomass") {
       metric_label = dplyr::case_when(
         metric == "spawning_biomass" ~ "Spawning Biomass",
         metric == "recruitment" ~ "Recruitment",
+        metric == "abundance" ~ "Total Abundance",
         metric == "fishing_mortality" ~ "Fishing Mortality",
         TRUE ~ metric
       )
@@ -659,7 +866,7 @@ plot_re_violin <- function(re_data, metric_filter = "spawning_biomass") {
     )
 }
 
-#' Create all SSB, R, F plots for multiple cases
+#' Create all SSB, R, Abundance, F plots for multiple cases
 #'
 #' @param main_dir main directory for a case
 #' @param output_dir Output directory for figures and tables
@@ -688,6 +895,12 @@ create_ssb_r_f_plots <- function(main_dir,
   # Calculate relative errors
   all_re <- calculate_relative_errors(all_data)
   mre_summary <- calculate_mre_summary(all_re)
+  mare_summary <- calculate_mare_summary(all_re)
+  sum_summary <- create_summed_metric_tables(
+    all_data, 
+    metrics = c("spawning_biomass", "abundance")
+  )
+  summed_sum_summary <- summarize_summed_metric_tables(sum_summary)
   
   plots <- list()
   
@@ -720,10 +933,20 @@ create_ssb_r_f_plots <- function(main_dir,
     ) +
     ggplot2::labs(title = "Fishing Mortality: EMs vs OM")
   
+  plots[["abundance_all_em_vs_om"]] <- summary_stats |>
+    dplyr::filter(metric == "abundance") |>
+    plot_metric(
+      metric_name = "abundance",
+      facet_by = "model",
+      include_om = TRUE
+    ) +
+    ggplot2::labs(title = "Total Abundance: EMs vs OM")
+  
   # Relative error boxplot plots over time
   if (!is.null(all_re) && nrow(all_re) > 0) {
     plots[["re_boxplot_sb"]] <- plot_re_boxplot_by_year(all_re, "spawning_biomass")
     plots[["re_boxplot_recruit"]] <- plot_re_boxplot_by_year(all_re, "recruitment")
+    plots[["re_boxplot_abundance"]] <- plot_re_boxplot_by_year(all_re, "abundance")
     plots[["re_boxplot_f"]] <- plot_re_boxplot_by_year(all_re, "fishing_mortality")
   }
   
@@ -731,6 +954,7 @@ create_ssb_r_f_plots <- function(main_dir,
   if (!is.null(all_re) && nrow(all_re) > 0) {
     plots[["re_sb"]] <- plot_re_violin(all_re, "spawning_biomass")
     plots[["re_recruit"]] <- plot_re_violin(all_re, "recruitment")
+    plots[["re_abundance"]] <- plot_re_violin(all_re, "abundance")
     plots[["re_f"]] <- plot_re_violin(all_re, "fishing_mortality")
   }
   
@@ -770,6 +994,26 @@ create_ssb_r_f_plots <- function(main_dir,
       mre_file <- file.path(output_dir, "median_relative_error_summary.csv")
       readr::write_csv(mre_summary, mre_file)
     }
+    
+    # Save MARE summary table
+    if (!is.null(mare_summary)) {
+      mare_file <- file.path(output_dir, "median_absolute_relative_error_summary.csv")
+      readr::write_csv(mare_summary, mare_file)
+    }
+    
+    # Save summed metric comparison tables
+    if (!is.null(sum_summary)) {
+      purrr::iwalk(sum_summary, function(table, metric_name) {
+        filename <- file.path(output_dir, paste0("summed_", metric_name, "_by_iteration.csv"))
+        readr::write_csv(table, filename)
+      })
+    }
+    
+    # Save summed metric summary statistics
+    if (!is.null(summed_sum_summary)) {
+      summed_sum_summary_file <- file.path(output_dir, "summed_sum_metric_summary.csv")
+      readr::write_csv(summed_sum_summary, summed_sum_summary_file)
+    }
   }
   
   return(list(
@@ -777,6 +1021,9 @@ create_ssb_r_f_plots <- function(main_dir,
     summary = summary_stats,
     relative_errors = all_re,
     mre_summary = mre_summary,
+    mare_summary = mare_summary,
+    sum_summary = sum_summary,
+    summed_sum_summary = summed_sum_summary,
     plots = plots
   ))
 }

@@ -1,6 +1,7 @@
 # Use the sequence of shell commands to install Wine to run .exe on Ubuntu
 source("scripts/utils.R")
 source("scripts/check_convergence.R")
+source("scripts/plot_ssb_r_f.R")
 
 install_wine_on_linux()
 install_required_packages()
@@ -42,28 +43,12 @@ ASSAMC::run_em(
   )
 )
 
-converged_sim_ids <- check_convergence(
-  em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS"),
-  n_sim = sim_input[["om_sim_num"]],
-  case_dir = "C0",
-  gradient_threshold = 0.004
-)
-
-
 setwd(project_dir)
 converged_sim_ids <- check_convergence(
   em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS"),
   n_sim = sim_input[["om_sim_num"]],
   case_dir = "C0",
   gradient_threshold = 0.004
-) |>
-  head(100)
-
-converged_sim_ids <- check_convergence(
-  em_names = c("BAM", "SS", "WHAM"),
-  n_sim = sim_input[["om_sim_num"]],
-  case_dir = "C0",
-  gradient_threshold = 0.002
 ) |>
   head(100)
 

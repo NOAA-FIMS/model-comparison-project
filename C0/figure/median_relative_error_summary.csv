@@ -1,4 +1,11 @@
 case,model,metric,mre,mre_lower,mre_upper,sd_mre,n_sims
+C0,ASAP,abundance,0.31,0.04,0.56,1.27,100
+C0,BAM,abundance,0.31,0.05,0.56,1.27,100
+C0,SS,abundance,0.36,0.1,0.66,1.27,100
+C0,WHAM_fixed_effects,abundance,0.45,0.06,0.58,1.8,100
+C0,WHAM_random_effects,abundance,0.4,0.16,0.65,1.27,100
+C0,FIMS_fixed_effects,abundance,0.29,-0,0.53,1.25,100
+C0,FIMS_random_effects,abundance,0.37,0.08,0.59,1.26,100
 C0,ASAP,fishing_mortality,-0.25,-1.06,0.5,3.03,100
 C0,BAM,fishing_mortality,-0.25,-1.05,0.46,3.03,100
 C0,SS,fishing_mortality,-0.36,-1.03,0.36,2.97,100
