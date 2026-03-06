@@ -12,7 +12,7 @@
     },
     "ghcr.io/rocker-org/devcontainer-features/r-packages:1": {
       //devtools, usethis, and pak contain utilities for r package development.
-      "packages": "cli,rlang,devtools,usethis,pak",
+      "packages": "cli,kableExtra,rlang,devtools,usethis,pak",
       "installSystemRequirements": true
     },
     "ghcr.io/rocker-org/devcontainer-features/quarto-cli:1": {}
