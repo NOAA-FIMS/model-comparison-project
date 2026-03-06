@@ -1,11 +1,4 @@
 case,model,metric,mare,mare_lower,mare_upper,mean_are,sd_are,n_obs
-C0,ASAP,abundance,1.63,1.58,1.69,2.31,2.72,3000
-C0,BAM,abundance,1.63,1.58,1.69,2.3,2.71,3000
-C0,SS,abundance,1.61,1.55,1.68,2.28,2.7,3000
-C0,WHAM_fixed_effects,abundance,1.66,1.6,1.73,2.43,2.96,3000
-C0,WHAM_random_effects,abundance,1.66,1.58,1.72,2.33,2.75,3000
-C0,FIMS_fixed_effects,abundance,1.61,1.56,1.69,2.29,2.71,3000
-C0,FIMS_random_effects,abundance,1.65,1.58,1.72,2.33,2.82,3000
 C0,ASAP,fishing_mortality,2.53,2.41,2.64,3.33,3.21,3000
 C0,BAM,fishing_mortality,2.53,2.41,2.64,3.33,3.21,3000
 C0,SS,fishing_mortality,2.45,2.34,2.54,3.28,3.2,3000
