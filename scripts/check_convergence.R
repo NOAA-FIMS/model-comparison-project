@@ -1,220 +1,194 @@
-#' Check convergence for ASAP, BAM, SS, WHAM, and FIMS estimation models
-#' @param em_names Character vector of estimation model names (e.g., c("ASAP", "BAM", "SS", "WHAM", "FIMS"))
-#' @param n_sim Integer, number of operating model simulations
-#' @param case_dir Character, path to case working directory
-#' @param gradient_threshold Numeric, threshold for gradient convergence (default = 0.006)
-#' @return A vector of simulation IDs that converged for ALL models
-check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.006) {
+#' Check convergence for ASAP, BAM, SS3, WHAM, and FIMS estimation models
+#' 
+#' Evaluates convergence based on two criteria: a positive definite Hessian and
+#' a maximum gradient component below a specified threshold.
+#' 
+#' @param em_names Character vector of model names (e.g., \code{c("ASAP", "BAM", "SS", "WHAM", "FIMS")}).
+#' @param n_sim Integer, number of operating model simulations.
+#' @param case_dir Character, path to case working directory.
+#' @param gradient_threshold Numeric. A single value or a named vector 
+#'   (e.g., \code{c(ASAP=0.001, WHAM_fixed_effects=1e-4)}). Defaults to 0.01.
+#' 
+#' @return A vector of simulation IDs that converged for ALL estimation models.
+#' 
+#' @examples
+#' \dontrun{
+#' converged_ids <- check_convergence(
+#'   em_names = c("ASAP", "WHAM"),
+#'   n_sim = 100,
+#'   case_dir = "C0",
+#'   gradient_threshold = 0.01
+#' )
+#' 
+#' converged_ids <- check_convergence(
+#'   em_names = c("ASAP", "WHAM"),
+#'   n_sim = 100,
+#'   case_dir = "C0",
+#'   gradient_threshold = c("ASAP" = 0.005, "WHAM_fixed_effects" = 0.0001)
+#' )
+#' }
+check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.01) {
   
-  # Separate models by type for different convergence checking approaches
-  # ADMB models (ASAP, BAM, SS) use .par files and admodel.cov
-  # WHAM uses convergence status RDS files (0 = converged)
-  # FIMS uses fit objects with FIMS::get_max_gradient() function
-  admb_models <- em_names[em_names %in% c("ASAP", "BAM", "SS")]
-  wham_models <- em_names[em_names == "WHAM"]
-  fims_models <- em_names[em_names == "FIMS"]
-  
-  # Initialize empty results tibble to store convergence info for all models
-  # Final structure: sim, model, positive_hessian, gradient
-  results <- tibble::tibble()
-  
-  # Process ADMB-based models (ASAP, BAM, SS)
-  # These models use ADMB for estimation and share similar output structure:
-  # - admodel.cov file indicates positive definite Hessian (convergence)
-  # - .par file contains parameter estimates and gradient value at position 16
-  if (length(admb_models) > 0) {
-    # Helper function to find the correct .par file for each model type
-    get_par_file <- function(sim_dir, model) {
-      par_files <- c("asap3.par", "BAM-Sim.par", "ss.par")
-      found <- par_files[file.exists(file.path(sim_dir, par_files))]
-      if (length(found) > 0) file.path(sim_dir, found[1]) else NA_character_
+  # Internal Helper: Safe RDS Reader
+  # Centralizes the logic for reading RDS files and extracting model-specific metrics
+  get_rds_value <- function(file_path, target_type = "direct", is_logical_type = FALSE) {
+    if (!file.exists(file_path)) {
+      return(if (is_logical_type) NA else NA_real_)
     }
     
-    # Create a grid of all sim-model combinations
+    rds_content <- tryCatch(readRDS(file_path), error = function(e) NULL)
+    if (is.null(rds_content)) return(if (is_logical_type) NA else NA_real_)
+    
+    # Model-specific extraction logic
+    if (target_type == "wham_gradient") {
+      # Use the absolute maximum of the final gradient vector
+      return(max(abs(rds_content[["final_gradient"]]), na.rm = TRUE))
+    }
+    if (target_type == "wham_hessian") {
+      # In WHAM, a successful Hessian is indicated by na_sdrep being FALSE
+      return(!rds_content[["na_sdrep"]])
+    }
+    
+    # Default for FIMS results or direct logical/numeric flags
+    return(rds_content)
+  }
+  
+  # Process ADMB Models (ASAP, BAM, SS3)
+  admb_models <- intersect(em_names, c("ASAP", "BAM", "SS"))
+  admb_results <- tibble::tibble()
+  
+  if (length(admb_models) > 0) {
     admb_results <- expand.grid(
-      sim = seq_len(n_sim),
-      model = admb_models,
+      simulation = seq_len(n_sim), 
+      model = admb_models, 
       stringsAsFactors = FALSE
-    ) |> 
-      tibble::as_tibble() |> 
+    ) |>
       dplyr::mutate(
-        # Build paths to output directories for each simulation
-        sim_dir = file.path(case_dir, "output", model, paste0("s", sim)),
-        cov_path = file.path(sim_dir, "admodel.cov"),
-        par_path = purrr::map2_chr(sim_dir, model, get_par_file),
-        # positive_hessian = TRUE if admodel.cov exists (indicates successful inversion)
-        positive_hessian = file.exists(cov_path),
-        # Extract gradient from .par file (16th value after extracting positions 6, 11, 16)
-        # This is the maximum gradient at convergence
-        gradient = purrr::map_dbl(par_path, ~{
+        simulation_directory = file.path(case_dir, "output", model, paste0("s", simulation)),
+        hessian_path = file.path(simulation_directory, "admodel.cov"),
+        parameter_path = dplyr::case_when(
+          model == "ASAP" ~ file.path(simulation_directory, "asap3.par"),
+          model == "BAM"  ~ file.path(simulation_directory, "BAM-Sim.par"),
+          model == "SS"   ~ file.path(simulation_directory, "ss.par"),
+          TRUE ~ NA_character_
+        ),
+        positive_hessian = file.exists(hessian_path),
+        gradient = purrr::map_dbl(parameter_path, ~ {
           if (file.exists(.x)) {
+            # Extract the maximum gradient (16th value) from the .par file header
             as.numeric(scan(.x, what = '', n = 16, quiet = TRUE)[c(6, 11, 16)])[3]
-          } else {
-            NA_real_
-          }
+          } else NA_real_
         })
       ) |>
-      dplyr::select(sim, model, positive_hessian, gradient)
-    
-    results <- dplyr::bind_rows(results, admb_results)
+      dplyr::select(simulation, model, positive_hessian, gradient)
   }
   
-  # Process WHAM models
-  # WHAM produces separate convergence status for fixed and random effects
-  # Convergence status: 0 = converged, non-zero = not converged
-  # positive_hessian: based on na_sdrep (FALSE if na_sdrep=TRUE, TRUE if na_sdrep=FALSE)
-  # We create separate rows for fixed and random effects to track them independently
-  if (length(wham_models) > 0) {
-    wham_results <- expand.grid(
-      sim = seq_len(n_sim),
-      model = wham_models,
+  # Process TMB Models (WHAM & FIMS)
+  # These models use a dual Fixed/Random effects structure
+  tmb_models <- intersect(em_names, c("WHAM", "FIMS"))
+  tmb_results <- tibble::tibble()
+  
+  if (length(tmb_models) > 0) {
+    tmb_results <- expand.grid(
+      simulation = seq_len(n_sim), 
+      model = tmb_models, 
       stringsAsFactors = FALSE
-    ) |> 
-      tibble::as_tibble() |> 
+    ) |>
       dplyr::mutate(
-        sim_dir = file.path(case_dir, "output", model, paste0("s", sim)),
-        fit_file_fixed = file.path(sim_dir, "fit_wham_fixed_effects.RDS"),
-        fit_file_random = file.path(sim_dir, "fit_wham_random_effects.RDS"),
-        # Load WHAM fixed effects convergence status (0 = converged) and positive_hessian
-        convergence_fixed = purrr::map_int(fit_file_fixed, ~{
-          if (file.exists(.x)) {
-            tryCatch({
-              fit <- readRDS(.x)
-              fit[["opt"]][["convergence"]]
-            }, error = function(e) NA_integer_)
-          } else {
-            NA_integer_
-          }
-        }),
-        positive_hessian_fixed = purrr::map_lgl(fit_file_fixed, ~{
-          if (file.exists(.x)) {
-            tryCatch({
-              fit <- readRDS(.x)
-              # positive_hessian is TRUE if na_sdrep is FALSE
-              !fit[["na_sdrep"]]
-            }, error = function(e) NA)
-          } else {
-            NA
-          }
-        }),
-        # Load WHAM random effects convergence status (0 = converged) and positive_hessian
-        convergence_random = purrr::map_int(fit_file_random, ~{
-          if (file.exists(.x)) {
-            tryCatch({
-              fit <- readRDS(.x)
-              fit[["opt"]][["convergence"]]
-            }, error = function(e) NA_integer_)
-          } else {
-            NA_integer_
-          }
-        }),
-        positive_hessian_random = purrr::map_lgl(fit_file_random, ~{
-          if (file.exists(.x)) {
-            tryCatch({
-              fit <- readRDS(.x)
-              # positive_hessian is TRUE if na_sdrep is FALSE
-              !fit[["na_sdrep"]]
-            }, error = function(e) NA)
-          } else {
-            NA
-          }
-        })
-      ) |>
-      dplyr::select(sim, convergence_fixed, convergence_random, positive_hessian_fixed, positive_hessian_random) |>
-      # Reshape to long format: one row per effect type per simulation
-      # This allows tracking fixed and random effects convergence separately
-      # Uses names_pattern to reshape both convergence and positive_hessian columns together
-      tidyr::pivot_longer(
-        cols = c(convergence_fixed, convergence_random, positive_hessian_fixed, positive_hessian_random),
-        names_to = c(".value", "effect_type"),
-        names_pattern = "(.+)_(fixed|random)"
-      ) |>
-      dplyr::mutate(
-        # Create descriptive model names for each effect type
-        model = dplyr::case_when(
-          effect_type == "fixed" ~ "WHAM_fixed_effects",
-          effect_type == "random" ~ "WHAM_random_effects",
-          TRUE ~ "WHAM"
+        simulation_directory = file.path(case_dir, "output", model, paste0("s", simulation)),
+        # Map paths based on model naming conventions
+        fixed_path  = ifelse(
+          model == "WHAM", 
+          file.path(simulation_directory, "fit_wham_fixed_effects.RDS"), 
+          file.path(simulation_directory, "max_gradient_fims_fixed_effects.RDS")
         ),
-        # Rename convergence column to gradient for consistency with other models
-        gradient = convergence
+        random_path = ifelse(
+          model == "WHAM", 
+          file.path(simulation_directory, "fit_wham_random_effects.RDS"), 
+          file.path(simulation_directory, "max_gradient_fims_random_effects.RDS")
+        ),
+        # FIMS has separate Hessian files; WHAM checks the fit object itself
+        fixed_hessian_path  = ifelse(
+          model == "WHAM", 
+          fixed_path, 
+          file.path(simulation_directory, "hessian_fims_fixed_effects.RDS")
+        ),
+        random_hessian_path = ifelse(
+          model == "WHAM", 
+          random_path, 
+          file.path(simulation_directory, "hessian_fims_random_effects.RDS")
+        )
       ) |>
-      dplyr::select(sim, model, positive_hessian, gradient)
-    
-    results <- dplyr::bind_rows(results, wham_results)
+      dplyr::mutate(
+        gradient_fixed = purrr::map_dbl(fixed_path, ~ {
+          if(grepl("wham", .x)) {
+            get_rds_value(.x, "wham_gradient")
+          } else {
+            get_rds_value(.x)
+          }
+        }
+        ),
+        gradient_random = purrr::map_dbl(random_path, ~ {
+          if(grepl("wham", .x)) {
+            get_rds_value(.x, "wham_gradient")
+          } else {
+            get_rds_value(.x)
+          }
+        }
+        ),
+        hessian_fixed   = purrr::map_lgl(fixed_hessian_path, ~ {
+          if(grepl("wham", .x)) {
+            get_rds_value(.x, "wham_hessian", TRUE)
+          } else {
+            get_rds_value(.x, is_logical_type = TRUE)
+          }
+        }
+        ),
+        hessian_random  = purrr::map_lgl(random_hessian_path, ~ {
+          if(grepl("wham", .x)) {
+            get_rds_value(.x, "wham_hessian", TRUE)
+          } else {
+            get_rds_value(.x, is_logical_type = TRUE)
+          }
+        }
+        )
+      ) |>
+      # Pivot using a pattern
+      tidyr::pivot_longer(
+        cols = matches("gradient|hessian"), 
+        names_to = c(".value", "effect_type"), 
+        names_pattern = "(gradient|hessian)_(fixed|random)"
+      ) |>
+      dplyr::mutate(model = paste0(model, "_", effect_type, "_effects")) |>
+      dplyr::select(
+        simulation, model, positive_hessian = hessian, gradient = gradient
+      )
   }
   
-  # Process FIMS models
-  # FIMS models store fit objects in RDS files for both fixed and random effects
-  # Use FIMS::get_max_gradient() to extract the maximum gradient from each fit
-  # Like WHAM, we track fixed and random effects separately
-  if (length(fims_models) > 0) {
-    fims_results <- expand.grid(
-      sim = seq_len(n_sim),
-      model = fims_models,
-      stringsAsFactors = FALSE
-    ) |> 
-      tibble::as_tibble() |> 
-      dplyr::mutate(
-        sim_dir = file.path(case_dir, "output", model, paste0("s", sim)),
-        fit_file_fixed = file.path(sim_dir, "max_gradient_fims_fixed_effects.RDS"),
-        fit_file_random = file.path(sim_dir, "fit_fims_random_effects.RDS"),
-        # Load FIMS fixed effects fit object and extract maximum gradient
-        gradient_fixed = purrr::map_dbl(fit_file_fixed, ~{
-          if (file.exists(.x)) {
-            tryCatch({
-              readRDS(.x)
-            }, error = function(e) NA_real_)
-          } else {
-            NA_real_
-          }
-        }),
-        # Load FIMS random effects fit object and extract maximum gradient
-        gradient_random = purrr::map_dbl(fit_file_random, ~{
-          if (file.exists(.x)) {
-            tryCatch({
-              fit <- readRDS(.x)
-              max(abs(fit[["sdr"]][["gradient.fixed"]]))
-            }, error = function(e) NA_real_)
-          } else {
-            NA_real_
-          }
-        })
-      ) |>
-      dplyr::select(sim, gradient_fixed, gradient_random) |>
-      # Reshape to long format: one row per effect type per simulation
-      tidyr::pivot_longer(
-        cols = c(gradient_fixed, gradient_random),
-        names_to = "effect_type",
-        values_to = "gradient"
-      ) |>
-      dplyr::mutate(
-        # Create descriptive model names for each effect type
-        model = dplyr::case_when(
-          effect_type == "gradient_fixed" ~ "FIMS_fixed_effects",
-          effect_type == "gradient_random" ~ "FIMS_random_effects",
-          TRUE ~ "FIMS"
-        ),
-        # For FIMS, gradient exists means model ran (even if not converged)
-        positive_hessian = NA,
-        # Gradient value comes directly from FIMS::get_max_gradient()
-        gradient = gradient
-      ) |>
-      dplyr::select(sim, model, positive_hessian, gradient)
-    
-    results <- dplyr::bind_rows(results, fims_results)
+  # Threshold Evaluation & Intersection
+  all_results <- dplyr::bind_rows(admb_results, tmb_results)
+  unique_models_found <- unique(all_results$model)
+  
+  # Standardize thresholds into a lookup table
+  if (is.null(names(gradient_threshold))) {
+    threshold_lookup <- tibble::tibble(
+      model = unique_models_found, threshold_value = gradient_threshold
+    )
+  } else {
+    threshold_lookup <- tibble::tibble(
+      model = names(gradient_threshold), 
+      threshold_value = unname(gradient_threshold)
+    ) |>
+      dplyr::full_join(tibble::tibble(model = unique_models_found), by = "model") |>
+      dplyr::mutate(threshold_value = tidyr::replace_na(threshold_value, 0.001))
   }
   
-  # Identify converged simulations for each model
-  # Convergence criteria: positive_hessian = TRUE AND gradient <= threshold
-  # Group by model to get a list of converged simulation IDs for each
-  converged_by_model <- results |> 
-    dplyr::filter(positive_hessian == TRUE, gradient <= gradient_threshold) |> 
-    dplyr::group_by(model) |> 
-    dplyr::summarise(converged_sims = list(sim), .groups = "drop")
-  
-  # Find the intersection of converged simulations across ALL models
-  # Only simulations that converged for every model will be in common_sim_ids
-  # This ensures we only keep simulations with valid results from all models
-  common_sim_ids <- Reduce(intersect, converged_by_model[["converged_sims"]])
+  # Return IDs that converged across every model type requested
+  converged_simulation_ids <- all_results |>
+    dplyr::left_join(threshold_lookup, by = "model") |>
+    dplyr::filter(positive_hessian == TRUE, gradient <= threshold_value) |>
+    dplyr::group_by(model) |>
+    dplyr::summarize(valid_simulations = list(simulation), .groups = "drop") |>
+    purrr::pluck("valid_simulations") |>
+    Reduce(f = intersect)
 }
