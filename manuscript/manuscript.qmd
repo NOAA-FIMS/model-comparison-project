@@ -12,22 +12,17 @@ author:
           postal-code: 20910
     attributes:
         corresponding: true
-  - name: Bob Security
-    email: bob@example.com
+  - name: Kelli F. Johnson
     affiliations:
-        - id: another-u
-          name: Another University
-          department: Department Name
-          address: Street Address
-          city: City
-          state: State
-          postal-code: Postal Code
-  - name: Cat Memes
-    email: cat@example.com
-    affiliations:
-        - ref: another-u
+        - id: noaa-ost
+          name: National Marine Fisheries Service, National Oceanic and Atmospheric Administration
+          department: Assessment and Monitoring Division, Office of Science & Technology
+          address: 1315 East-West Highway, Building SSMC3
+          city: Silver Spring
+          state: MD
+          postal-code: 20910
 abstract: |
-  As NOAA Fisheries transitions to next-generation stock assessment methods, including the Fisheries Integrated Modeling System (FIMS), it is important to evaluate how its performance compares with established modeling tools. Using an age-structured operating model, we compared FIMS estimates with four widely used assessment models in the United States. Comparisons with ADMB-based models, the Age Structured Assessment Program, Stock Synthesis, and the Beaufort Assessment Model, focused on verifying estimates of key assessment quantities, including spawning biomass, recruitment, and fishing mortality. Comparisons with the Woods Hole Assessment Model focused on verifying estimates of random effects. Results indicate that estimates from FIMS are highly consistent with those from established modeling frameworks, with median relative error closely aligned across key metrics. Differences among models were generally minor and primarily associated with differences in the sum-to-zero constraint on recruitment deviations, equilibrium initialization for initial numbers-at-age, and recruitment bias correction. Overall, these findings demonstrate that FIMS provides a reliable and modular framework for U.S. fisheries stock assessment while maintaining high standards of estimation accuracy and enabling flexible random-effects modeling.
+  As NOAA Fisheries transitions to next-generation stock assessment methods, including the Fisheries Integrated Modeling System (FIMS), it is important to evaluate how its performance compares with established modeling tools. Using an age-structured operating model, we compared FIMS estimates with four widely used assessment models in the United States. Comparisons with ADMB models, the Age Structured Assessment Program, Stock Synthesis, and the Beaufort Assessment Model, focused on verifying estimates of key assessment quantities, including spawning biomass, recruitment, and fishing mortality. Comparisons with the Woods Hole Assessment Model focused on evaluating the performance of random-effects configurations. Results indicate that estimates from FIMS are highly consistent with those from established modeling frameworks, with median relative error closely aligned across key metrics. Differences among models were generally minor and primarily associated with differences in the sum-to-zero constraint on recruitment deviations, equilibrium initialization for initial numbers-at-age, and recruitment bias correction. Overall, these findings demonstrate that FIMS provides a reliable and modular framework for U.S. fisheries stock assessment while maintaining high standards of estimation accuracy and enabling flexible random-effects modeling.
 keywords: 
   - Model Comparison
   - Fisheries Integrated Modeling System
@@ -47,21 +42,21 @@ format:
 # Introduction
 
 - NOAA Fisheries is developing FIMS as a next-generation, extensible stock assessment framework.
-- Previous studies showed Age Structured Assessment Program (ASAP), Beaufort Assessment Model (BAM), and Stock Synthesis (SS3) produce similar results when configured similarly (@LI2021149).
+- Previous studies showed that the Age Structured Assessment Program (ASAP), Beaufort Assessment Model (BAM), and Stock Synthesis (SS3) produce similar results when configured similarly (@LI2021149).
 - We aim to validate FIMS estimates against ADMB-based models (ASAP, BAM, SS3) for key quantities and assess FIMS's random-effects feature using Woods Hole Assessment Model (WHAM; @STOCK2021105967).
 
 # Methods 
 
-- An age-structured operating model (OM) with grouper-like life history was used to simulate data (@LI2021149).
+- An age-structured operating model (OM) with grouper-like life history was used to simulate data with a 30-year duration (@LI2021149).
 - ASAP, BAM, SS3, WHAM, and FIMS were configured as estimation models (EMs). Configurations for WHAM and FIMS included the use of fixed versus random effects for recruitment deviations.
-- The OM was simulated 100 times to generate replicate datasets.
+- A total of 500 simulation replicates were initially generated to ensure sufficient sample size for convergence analysis. The final analysis was performed on a subset of 100 simulations that successfully converged across all models.
 - Model performance metrics included:
   - Median relative error (MRE) and median absolute relative error (MARE) for key quantities such as spawning biomass ($SB$), recruitment ($R$), and fishing mortality ($F$). 
     - Relative error (RE) was calculated as $\frac{\hat{\theta}_i}{\theta_i} - 1$, where $\theta_i$ is the true value for simulated dataset $i$ and $\hat{\theta}_i$ is the value estimated from fitting the model to the simulated data. 
     - 95% confidence intervals of the MRE were calculated using the binomial distribution to estimate bias of each EM for a given OM (@THOMPSON1936122).
     - To summarize the bias across simulations and years for each model, we calculated the median RE across years for each simulation and then took the mean of these medians across simulations (@STOCK2021105967).
     - MARE across all years and simulations was calculated to quantify the overall accuracy, providing a measure of the magnitude of estimation errors.
-  - Convergence rate of EMs.
+  - Convergence rate ($CR$) for each estimation model ($m$) was calculated as $CR_m = \frac{N_{converged, m}}{N_{total, m}}$, where $N_{converged}$ represents simulations meeting both the gradient and Hessian criteria.  
 
 # Results
 
@@ -79,7 +74,7 @@ format:
 knitr::include_graphics("../C0/figure/recruit_all_em_vs_om.png")
 ```
 
-- Across all EMs, the MRE remained close to zero, indicating minimal bias in estimates relative to the OM. The distributions of REs showed consistent patterns among EMs over time (@fig-fishing-mortality-boxplot). In the early years, REs were generally small and narrowly distributed, reflecting high precision in model estimates. In later years, the distributions widen across all EMs, indicating increased variability in the estimates. Overall, both the central tendency and variability of REs were similar across EMs, with FIMS configurations performing comparably to the other EMs (@fig-spawning-biomass-violin).
+- Across all EMs, the median RE remained close to zero, indicating minimal bias in estimates relative to the OM. The distributions of REs showed consistent patterns among EMs over time (@fig-fishing-mortality-boxplot). In the early years, REs were generally small and narrowly distributed, reflecting high precision in model estimates. In later years, the distributions widen across all EMs, indicating increased variability in the estimates. Overall, both the central tendency and variability of REs were similar across EMs, with FIMS configurations performing comparably to the other EMs (@fig-spawning-biomass-violin).
 
 ```{r}
 #| label: fig-fishing-mortality-boxplot
@@ -105,7 +100,31 @@ knitr::include_graphics("../C0/figure/re_boxplot_f.png")
 knitr::include_graphics("../C0/figure/re_sb.png")
 ```
 
-- Summary statistics of absolute relative error across all years and simulations showed similar performance among EMs for all quantities of interest (@tbl-mare). For fishing mortality, FIMS showed similar performance to the other models, with MARE values between 2.50 and 2.54. Recruitment estimates had the largest errors across all models, and FIMS results (MARE = 3.99) were comparable to those from ASAP, BAM, SS3, and WHAM (MARE = 3.96–4.00). For spawning biomass, FIMS produced among the lowest MARE values (2.01–2.08), indicating high estimation accuracy relative to the OM. Overall, the error metrics for FIMS were similar to those of the established models across all quantities, demonstrating that FIMS achieved comparable estimation performance.
+- The mean of median RE for FIMS showed strong consistency with other EMs. Across all metrics, FIMS values were within the same decimal range as the others. In addition, random-effects models consistently reduced bias compared to their fixed-effects counterparts across all models. 
+
+```{r}
+#| label: tbl-mre
+#| tbl-cap: "Mean of Median Relative Error (MRE; %) for key assessment metrics. 95% confidence intervals (mre_lower, mre_upper) and standard deviation (sd_mre) are calculated across 100 converged simulation replicates."
+#| tbl-alt: "Table summarizing the Median Relative Error (MRE) for seven estimation models across three metrics: fishing mortality, recruitment, and spawning biomass."
+#| echo: false
+
+# Read the data
+mre_data <- read.csv("../C0/figure/median_relative_error_summary.csv")
+
+# Generate the table
+knitr::kable(mre_data, "pipe", caption = "Mean of Median Relative Error Summary") |>
+  kableExtra::kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"), 
+    full_width = F,
+    latex_options = "hold_position"
+  ) |>
+  # Highlighting the MRE column as it is the primary focus for bias
+  kableExtra::column_spec(2, bold = T, color = "black") |> 
+  kableExtra::landscape() |>
+  kableExtra::row_spec(0, angle = 45)
+```
+
+- Summary statistics of absolute relative error across all years and simulations showed similar performance among EMs for all quantities of interest (@tbl-mare). For fishing mortality, FIMS showed similar performance to the other models, with MARE values between 2.58 and 2.6. Recruitment estimates had the largest errors across all models. However, FIMS produced the lowest MARE (3.79), compared to ASAP, BAM, SS3, and WHAM (3.81–3.83). For spawning biomass, FIMS yielded comparable MARE values (2.00–2.03), indicating high estimation accuracy relative to the OM. Overall, the error metrics for FIMS were similar to those of the established models across all quantities, demonstrating that FIMS achieved comparable estimation performance.
 
 ```{r}
 #| label: tbl-mare
@@ -124,13 +143,44 @@ knitr::kable(mare_data, "pipe", caption = "Median Absolute Relative Error Summar
   kableExtra::row_spec(0, angle = 45) # Rotates header text
 ```
 
-- Convergence rate of EMs (working in progress)
+- Convergence rates varied across EMs, with TMB models generally exhibiting higher values than ADMB models under the specified convergence criteria (@tbl-convergence-rates). Both FIMS and WHAM showed particularly strong convergence when configured with random effects. However, these results are based on a one-size-fits-all criterion and may change if model-specific gradient thresholds are applied.
+
+```{r}
+#| label: tbl-convergence-rates
+#| tbl-cap: "Convergence success for 500 simulations across seven estimation model (EM) configurations. Convergence was defined as a positive-definite Hessian matrix and a maximum gradient component threshod."
+#| tbl-alt: "Table showing convergence rates for ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects). Columns include total simulations, converged simulations, and the convergence rate."
+#| echo: false
+
+# # Read the convergence data
+# convergence_rates <- read.csv("../C0/figure/convergence_rates.csv")
+
+# # Display the data as a table
+# knitr::kable(convergence_rates, "pipe") |>
+#   kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) |>
+#   kableExtra::column_spec(2, bold = T) |>
+#   kableExtra::row_spec(0, angle = 45)
+```
 
 # Discussion
 
 - FIMS produced estimates of spawning biomass, recruitment, and fishing mortality that were highly consistent with those from established stock assessment models, indicating comparable estimation accuracy across metrics of interest.
-- Small differences among models likely resulted from implementation details such as recruitment deviation constraints, initialization of numbers-at-age, and recruitment bias correction (working in progress).
-- Comparisons with WHAM to evaluate the random-effects implementation in FIMS are currently under investigation.
+- The similarity in performance across models suggests that, when configured equivalently, differences in underlying software frameworks (e.g., ADMB vs. TMB) have minimal impact on estimation outcomes. This consistency is particularly important for ongoing transitions in assessment platforms, as it indicates that adopting FIMS is unlikely to introduce systematic differences in key management quantities. 
+- Small differences among models likely resulted from implementation details such as recruitment deviation constraints (e.g., sum-to-zero assumptions) and approaches to equilibrium initialization of numbers-at-age (working in progress).
+- Random-effects configurations in both FIMS and WHAM generally reduced bias relative to fixed-effects models. This finding underscores the value of incorporating random effects in stock assessment models. The strong performance of FIMS in this context demonstrates its capability to flexibly implement and estimate random-effects structures.
 - These results support the use of FIMS as a reliable and flexible framework for next-generation fisheries stock assessments while maintaining consistency with existing modeling approaches.
+
+# Appendix
+
+```{r}
+#| label: fig-q-convergence
+#| fig-cap: "Figure S1. Centered Median Absolute Relative Errors (MAREs) ($MARE_i - MARE_{500}$, where $i$ = number of simulations used in calculation) of catchability ($q$) versus the number of replicates included in the calculation. Results are shown for seven estimation models: ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects)."
+#| fig-alt: "Line plot showing the centered Median Absolute Relative Errors of catchability converging toward zero as the number of simulations increases from 1 to 500. Different colored lines represent different estimation models, all stabilizing within a narrow range after approximately 100 to 200 iterations."
+#| fig-width: 14
+#| fig-height: 12
+#| fig-align: center
+#| out-width: 100%
+#| echo: false
+knitr::include_graphics("../C0/figure/q_convergence.png")
+```
 
 # References {-}
