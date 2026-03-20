@@ -121,7 +121,7 @@ knitr::include_graphics("../C0/figure/re_sb.png")
 mre_data <- read.csv("../C0/figure/median_relative_error_summary.csv")
 
 # Generate the table
-knitr::kable(mre_data, "pipe", caption = "Mean of Median Relative Error Summary") |>
+knitr::kable(mre_data, "pipe") |>
   kableExtra::kable_styling(
     bootstrap_options = c("striped", "hover", "condensed"), 
     full_width = F,
@@ -130,10 +130,10 @@ knitr::kable(mre_data, "pipe", caption = "Mean of Median Relative Error Summary"
   # Highlighting the MRE column as it is the primary focus for bias
   kableExtra::column_spec(2, bold = T, color = "black") |> 
   kableExtra::landscape() |>
-  kableExtra::row_spec(0, angle = 45)
+  kableExtra::row_spec(0)
 ```
 
-- Summary statistics of absolute relative error across all years and simulations showed similar performance among EMs for all quantities of interest (@tbl-mare). For fishing mortality, FIMS showed similar performance to the other models, with MARE values between 2.58 and 2.6. Recruitment estimates had the largest errors across all models. However, FIMS produced the lowest MARE (3.79), compared to ASAP, BAM, SS3, and WHAM (3.81–3.83). For spawning biomass, FIMS yielded comparable MARE values (2.00–2.03), indicating high estimation accuracy relative to the OM. Overall, the error metrics for FIMS were similar to those of the established models across all quantities, demonstrating that FIMS achieved comparable estimation performance.
+- Summary statistics of absolute relative error across all years and simulations showed similar performance among EMs for all quantities of interest (@tbl-mare). For fishing mortality, FIMS performed comparably to the other models, with a lowest MARE of 2.63%. Recruitment estimates exhibited the largest errors across all models. However, the FIMS random-effects model produced the lowest MARE (3.82%), slightly outperforming ASAP, BAM, SS3, and WHAM (3.83%–3.87%). For spawning biomass, FIMS yielded lowest MARE values (2.08% and 2.11%), indicating high estimation accuracy relative to the OM. Overall, the error metrics for FIMS were similar to those of the established models across all quantities, demonstrating that FIMS achieved comparable estimation performance.
 
 ```{r}
 #| label: tbl-mare
@@ -145,11 +145,11 @@ knitr::kable(mre_data, "pipe", caption = "Mean of Median Relative Error Summary"
 mare_data <- read.csv("../C0/figure/median_absolute_relative_error_summary.csv")
 
 # Display the data as a table
-knitr::kable(mare_data, "pipe", caption = "Median Absolute Relative Error Summary") |>
+knitr::kable(mare_data, "pipe") |>
   kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) |>
   kableExtra::column_spec(2, bold = T) |>
   kableExtra::landscape() |>
-  kableExtra::row_spec(0, angle = 45) # Rotates header text
+  kableExtra::row_spec(0)
 ```
 
 - Convergence rates varied across EMs, with TMB models generally exhibiting higher values than ADMB models under the specified convergence criteria (@tbl-convergence-rates). Both FIMS and WHAM showed particularly strong convergence when configured with random effects. However, these results are based on a one-size-fits-all criterion and may change if model-specific gradient thresholds are applied.
@@ -160,14 +160,14 @@ knitr::kable(mare_data, "pipe", caption = "Median Absolute Relative Error Summar
 #| tbl-alt: "Table showing convergence rates for ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects). Columns include total simulations, converged simulations, and the convergence rate."
 #| echo: false
 
-# # Read the convergence data
-# convergence_rates <- read.csv("../C0/figure/convergence_rates.csv")
+# Read the convergence data
+convergence_rates <- read.csv("../C0/figure/convergence_rates.csv")
 
-# # Display the data as a table
-# knitr::kable(convergence_rates, "pipe") |>
-#   kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) |>
-#   kableExtra::column_spec(2, bold = T) |>
-#   kableExtra::row_spec(0, angle = 45)
+# Display the data as a table
+knitr::kable(convergence_rates, "pipe") |>
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) |>
+  kableExtra::column_spec(2, bold = T) |>
+  kableExtra::row_spec(0)
 ```
 
 # Discussion
@@ -182,7 +182,7 @@ knitr::kable(mare_data, "pipe", caption = "Median Absolute Relative Error Summar
 
 ```{r}
 #| label: fig-q-convergence
-#| fig-cap: "Figure S1. Centered Median Absolute Relative Errors (MAREs) ($MARE_i - MARE_{500}$, where $i$ = number of simulations used in calculation) of catchability ($q$) versus the number of replicates included in the calculation. Results are shown for seven estimation models: ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects)."
+#| fig-cap: "Centered Median Absolute Relative Errors (MAREs) ($MARE_i - MARE_{500}$, where $i$ = number of simulations used in calculation) of catchability ($q$) versus the number of replicates included in the calculation. Results are shown for seven estimation models: ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects)."
 #| fig-alt: "Line plot showing the centered Median Absolute Relative Errors of catchability converging toward zero as the number of simulations increases from 1 to 500. Different colored lines represent different estimation models, all stabilizing within a narrow range after approximately 100 to 200 iterations."
 #| fig-width: 14
 #| fig-height: 12
