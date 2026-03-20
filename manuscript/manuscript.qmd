@@ -41,9 +41,18 @@ format:
 
 # Introduction
 
+Population-dynamics models are commonly used to assess the status of marine species and the sustainability of management decisions (TODO: Hilborn and Walter, 1992). Modernizing the models involves including adding the capacity to estimate random effects (TODO: find citation), fit to recapture data (e.g., close-kin mark-recapture data; TODO: citation), and use machine learning (e.g., random forests; TODO: citation maybe Caitlin's). Development of the latter two options are still in the exploratory stages but the inclusion of random effects is seen as a best practice, and has been for several years (TODO: citation).
+
+With the development of the highly-used R package (R Core Team, 2026 TODO: add to bib file) Template Model Builder (TMB; TODO: Kristensen et al., 2016), the estimation of random effects is no longer limited to high-performance computers or simple linear models. In fact, several state-space population-dynamics models exist and are used for management (e.g., State-space Assessment Model, SAM; Woods Hole Assessment Model, WHAM; Climate-Enhanced, Age-based model with Temperature-specific Trophic Linkages and Energetics, RCEATTLE).
+- Laplace approximation
+- Benefits of random effects in population-dynamics models
+- Li et al. (2026) https://doi.org/10.1139/cjfas-2025-0093
+
+In the United States, WHAM (@STOCK2021105967) was the first generalizable population-dynamics model written in TMB, where it is meant to replace the use of the Age-Structured Assessment Program (ASAP; TOOD: citation), a model used on the east coast.
+- NOAA's strategic plan / CAPAM
 - NOAA Fisheries is developing FIMS as a next-generation, extensible stock assessment framework.
-- Previous studies showed that the Age Structured Assessment Program (ASAP), Beaufort Assessment Model (BAM), and Stock Synthesis (SS3) produce similar results when configured similarly (@LI2021149).
-- We aim to validate FIMS estimates against ADMB-based models (ASAP, BAM, SS3) for key quantities and assess FIMS's random-effects feature using Woods Hole Assessment Model (WHAM; @STOCK2021105967).
+
+Previous studies showed that the Age Structured Assessment Program (ASAP), Beaufort Assessment Model (BAM), and Stock Synthesis (SS3) produced similar results when configured similarly (@LI2021149). All three of these frameworks are written in AD Model Builder (ADMB; TODO: citation), a statistical platform that has since discontinued in development, and thus, they cannot easily be modified to include next-generation features. In this manuscript we take the results of @LI2021149 one step further and investigate how legacy assumptions hold up when random effects are capable. Results verify estimates from the FIMS model by comparing them to both legacy, ADMB-based frameworks (i.e., ASAP, BAM, and SS3) and a modern TMB framework (i.e., WHAM).
 
 # Methods 
 
@@ -60,7 +69,7 @@ format:
 
 # Results
 
-- Time series estimates from all EMs captured the overall trends observed in the operating model, and the variability across the 100 simulations was consistent among EMs and closely matched the variability of the OM (@fig-recruitment-time-series).
+- Time-series estimates from all EMs captured the overall trends observed in the operating model, and the variability across the 100 simulations was consistent among EMs and closely matched the variability of the OM (@fig-recruitment-time-series).
 
 ```{r}
 #| label: fig-recruitment-time-series
