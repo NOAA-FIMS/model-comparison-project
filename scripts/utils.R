@@ -36,9 +36,8 @@ install_required_packages <- function() {
   # Install the required R packages
   install.packages("pak")
   pak::pkg_install(c(
-    "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@run-exe-with-wine",
+    "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison",
     "NOAA-FIMS/FIMS",
-    # "NOAA-FIMS/FIMS@main-model-comparison-project-BL",
     "timjmiller/wham",
     "httr",
     "parallel",
