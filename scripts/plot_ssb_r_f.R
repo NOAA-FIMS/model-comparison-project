@@ -671,9 +671,8 @@ calculate_mre_summary <- function(re_data) {
       mre_upper = round(mre_upper, 2),
       sd_mre = round(sd_mre, 2)
     ) |>
-    dplyr::arrange(case, metric, model)
-  
-  return(mre_summary)
+    dplyr::arrange(case, metric, model) |>
+    dplyr::filter(metric %in% c("fishing_mortality", "recruitment", "spawning_biomass"))
 }
 
 #' Calculate median absolute relative error summary table
@@ -708,7 +707,8 @@ calculate_mare_summary <- function(re_data) {
       mean_are = round(mean_are, 2),
       sd_are = round(sd_are, 2)
     ) |>
-    dplyr::arrange(case, metric, model)
+    dplyr::arrange(case, metric, model) |>
+    dplyr::filter(metric %in% c("fishing_mortality", "recruitment", "spawning_biomass"))
   
   return(mare_summary)
 }
@@ -921,7 +921,8 @@ plot_re_violin <- function(re_data, metric_filter = "spawning_biomass") {
     )
   
   ggplot2::ggplot(plot_data, ggplot2::aes(x = model, y = re_ratio, fill = model)) +
-    ggplot2::geom_violin(alpha = 0.7, quantiles = c(0.25, 0.5, 0.75)) +
+    ggplot2::geom_violin(alpha = 0.7) +
+    ggplot2::coord_cartesian(ylim = c(-0.5, 0.5)) +
     ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
     ggplot2::facet_grid(metric_label ~ case_label, scales = "free_y") +
     ggplot2::scale_fill_manual(values = model_colors) +

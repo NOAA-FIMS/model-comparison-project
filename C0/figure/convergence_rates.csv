@@ -1,8 +1,8 @@
 "","model","total_simulations","converged_simulations","convergence_rate"
-"1","ASAP",500,375,0.75
-"2","BAM",500,457,0.914
-"3","SS3",500,500,1
-"4","WHAM_fixed_effects",500,365,0.73
-"5","WHAM_random_effects",500,500,1
-"6","FIMS_fixed_effects",500,496,0.992
-"7","FIMS_random_effects",500,500,1
+"1","ASAP",500,375,75
+"2","BAM",500,457,91.4
+"3","SS3",500,500,100
+"4","WHAM_fixed_effects",500,365,73
+"5","WHAM_random_effects",500,500,100
+"6","FIMS_fixed_effects",500,496,99.2
+"7","FIMS_random_effects",500,500,100

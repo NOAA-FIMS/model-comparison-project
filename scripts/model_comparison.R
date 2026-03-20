@@ -143,14 +143,10 @@ converged_sims <- check_convergence(
 )
 saveRDS(converged_sims, file.path(project_dir, "C0", "figure", "converged_sims.RDS"))
 
-# Identify bad simulations where WHAM fixed effects models exploded 
+# Identify bad simulations where models exploded 
 # These are outliers that likely didn't converge realistically.
 bad_sim_ids <- all_re |>
-  dplyr::filter(
-    (metric == "spawning_biomass") & 
-    (as.vector(are) > 15) & 
-    (model == "WHAM_fixed_effects")
-  ) |>
+  dplyr::filter(as.vector(are) > 40) |>
   dplyr::pull(simulation) |>
   unique() |>
   sort()

@@ -223,15 +223,7 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
           TRUE ~ "FIMS"
         )
       ) |>
-      dplyr::select(sim, model, positive_hessian, gradient) |>
-      # TODO: remove the code below after updating Hessian extraction in ASSAMC
-      dplyr::mutate(
-        positive_hessian = dplyr::if_else(
-          model == "FIMS_random_effects",
-          TRUE,
-          positive_hessian
-        )
-      )
+      dplyr::select(sim, model, positive_hessian, gradient)
     
     results <- dplyr::bind_rows(results, fims_results)
   }
@@ -251,7 +243,7 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
     dplyr::summarize(
       total_simulations = dplyr::n(),
       converged_simulations = sum(positive_hessian == TRUE & gradient <= ifelse(is.null(names(gradient_threshold)), gradient_threshold, gradient_threshold[model]), na.rm = TRUE),
-      convergence_rate = converged_simulations / total_simulations,
+      convergence_rate = converged_simulations / total_simulations * 100,
       .groups = "drop"
     ) |>
     dplyr::arrange(model)
