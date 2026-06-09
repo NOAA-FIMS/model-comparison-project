@@ -33,7 +33,8 @@
       "extensions": [
         "ms-vsliveshare.vsliveshare",
         "george-alisson.html-preview-vscode",
-        "quarto.quarto"
+        "quarto.quarto",
+        "syncfusioninc.document-viewer-vscode-extensions"
       ]
     } // vscode
   } // customizations
