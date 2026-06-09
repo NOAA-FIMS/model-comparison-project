@@ -37,9 +37,51 @@ format:
       formatting: preprint
       # model: 3p # Don't set a model with preprint
       cite-style: authoryear
+filters:
+  - critic-markup
+critic-mode: markup
 ---
 
+::: {.callout-note}
+## 📝 Co-Author Editing Guide 
+Please use the following syntax to propose edits, add comments, or make revisions directly in this `manuscript/manuscript.qmd` file:
+
+* **Highlight text:** `{==Highlighted text==}`
+* **Highlight with a comment:** `{==Highlighted text==}{>>First comment<<}`
+* **Stand-alone comment:** `{>>Single comment<<}`
+* **Add new text:** `{++This is added text++}`
+* **Add text & remove text:** `{++This is added text++}{--removed--}`
+* **Remove text:** `{--This is removed text--}`
+* **Remove text & add text:** `{--This is removed text--}{++added ++}`
+* **Replace/Substitute text:** `{~~This is original text~>this is the replacement~~}`
+
+When addressing a comment through edits to the `.qmd` file, please update the comment by prefixing it with "Done:" (e.g., `{>>Done: Update wording in the Introduction.<<}`). This helps track which comments have been resolved.
+
+To control how edits are displayed, set the `critic-mode` field in the YAML header to one of the following: 
+
+- `markup`: show changes with highlights
+- `edited`: show the final document with changes applied
+- `original`: show the document before edits
+
+To render the manuscript from the command line, use one of the following commands:
+
+- `quarto render manuscript/manuscript.qmd --to pdf`
+- `quarto render manuscript/manuscript.qmd --to docx`
+- `quarto render manuscript/manuscript.qmd --to html`
+
+:::
+
 # Introduction
+
+{>>Eric: maybe broaden the first paragraph to include state space models IPMs more broadly, and then narrow the focus to fisheries assessment models<<}
+
+{>>Eric: maybe broaden suite of models to include more non-US examples<<}
+
+{>>Eric: FIMS isn't really detailed here, but it be worth describing it like the other models<<}
+
+{>>Eric: related, it's not really clear why anyone should use FIMS over other methods, but I think you could highlight open science efforts at NOAA and other agencies, as well as a need for broad collaboration and building trust with transparent, reproducible research<<}
+
+{>>Eric: related to the 3 points above I think you could restructure the paragraphs in the intro to be in the form of something like: 1. Models based on ADMB are reliable and have been around forever but lack modern features 2. TMB is one modeling platform that enables all of the things we need in modern assessments (highglight random effects and other features) 3. FIMS represents the next generation tool and because of the modularization is widely extendable to other systems<<}
 
 Population-dynamics models are commonly used to assess the status of marine species and the sustainability of management decisions (TODO: Hilborn and Walter, 1992). Modernizing the models involves including adding the capacity to estimate random effects (TODO: find citation), fit to recapture data (e.g., close-kin mark-recapture data; TODO: citation), and use machine learning (e.g., random forests; TODO: citation maybe Caitlin's). Development of the latter two options are still in the exploratory stages but the inclusion of random effects is seen as a best practice, and has been for several years (TODO: citation).
 
@@ -56,8 +98,16 @@ Previous studies showed that the Age Structured Assessment Program (ASAP), Beauf
 
 # Methods 
 
+{>>Eric: might be worth a more detailed description of FIMS features here, if not the intro<<}
+
+{>>Eric: maybe include a table of the life history parameters for OM<<}
+
+{>>Eric: how recruitment was modeled in each of these settings<<}
+
+{>>Eric: any relevant differences between older models and FIMS<<}
+
 - An age-structured operating model (OM) with grouper-like life history was used to simulate data with a 30-year duration (@LI2021149).
-- ASAP, BAM, SS3, WHAM, and FIMS were configured as estimation models (EMs). Configurations for WHAM and FIMS included the use of fixed versus random effects for recruitment deviations.
+- ASAP, BAM, SS3, WHAM, and FIMS were configured as {==estimation models==}{>>Eric: it'd be helpful to have tables of the various EMs, with their settings. I realize this'll be in Github too<<} (EMs). Configurations for WHAM and FIMS included the use of fixed versus random effects for recruitment deviations.
 - A total of 500 simulation replicates were initially generated to ensure sufficient sample size for convergence analysis. The final analysis was performed on a subset of 100 simulations that successfully converged across all models.
 - Model performance metrics included:
   - Median relative error (MRE) and median absolute relative error (MARE) for key quantities such as spawning biomass ($SB$), recruitment ($R$), and fishing mortality ($F$). 
@@ -68,6 +118,8 @@ Previous studies showed that the Age Structured Assessment Program (ASAP), Beauf
   - Convergence rate ($CR$) for each estimation model ($m$) was calculated as $CR_m = \frac{N_{converged, m}}{N_{total, m}}$, where $N_{converged}$ represents simulations meeting both the gradient and Hessian criteria.  
 
 # Results
+
+{>>Eric: FIMS seems to do well with the central tendency, but the variance (sd_mre) is often among the highest, might be good to devote a paragraph to this in the discussion, or try to do a group brainstorm to think more about why this is?<<}
 
 - Time-series estimates from all EMs captured the overall trends observed in the operating model, and the variability across the 100 simulations was consistent among EMs and closely matched the variability of the OM (@fig-recruitment-time-series).
 
@@ -162,7 +214,7 @@ knitr::kable(convergence_rates, format = "pipe")
 - FIMS produced estimates of spawning biomass, recruitment, and fishing mortality that were highly consistent with those from established stock assessment models, indicating comparable estimation accuracy across metrics of interest.
 - The similarity in performance across models suggests that, when configured equivalently, differences in underlying software frameworks (e.g., ADMB vs. TMB) have minimal impact on estimation outcomes. This consistency is particularly important for ongoing transitions in assessment platforms, as it indicates that adopting FIMS is unlikely to introduce systematic differences in key management quantities. 
 - Small differences among models likely resulted from implementation details such as recruitment deviation constraints (e.g., sum-to-zero assumptions) and approaches to equilibrium initialization of numbers-at-age (working in progress).
-- Random-effects configurations in both FIMS and WHAM generally reduced bias relative to fixed-effects models. This finding underscores the value of incorporating random effects in stock assessment models. The strong performance of FIMS in this context demonstrates its capability to flexibly implement and estimate random-effects structures.
+- {==Random-effects configurations==}{>>Eric: the random effects results could be highlighted a bit more I think (this seems like one of the most interesting / useful results from this comparison!)<<} in both FIMS and WHAM generally reduced bias relative to fixed-effects models. This finding underscores the value of incorporating random effects in stock assessment models. The strong performance of FIMS in this context demonstrates its capability to flexibly implement and estimate random-effects structures.
 - These results support the use of FIMS as a reliable and flexible framework for next-generation fisheries stock assessments while maintaining consistency with existing modeling approaches.
 
 # Appendix
