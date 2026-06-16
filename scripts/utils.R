@@ -13,6 +13,7 @@ install_wine_on_linux <- function() {
     "sudo wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources",
     "sudo dpkg --add-architecture i386",
     "sudo apt update",
+    "sudo apt-get install -f -y",
     "sudo apt install --install-recommends winehq-stable -y"
   )
   
@@ -36,14 +37,14 @@ install_required_packages <- function() {
   # Install the required R packages
   install.packages("pak")
   pak::pkg_install(c(
-    "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison",
+    "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems",
     "NOAA-FIMS/FIMS",
     "timjmiller/wham",
     "httr",
     "parallel",
     "doParallel"
   ))
-
+  
   # Download the EM input files required for the model comparison project, including
   # source code .tpl files for model compilation, input data files, and configuration
   # files.

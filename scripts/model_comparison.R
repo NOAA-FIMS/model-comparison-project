@@ -51,15 +51,17 @@ ASSAMC::run_om(input_list = sim_input)
 
 # Run EMs
 # Mapping specific config files to the respective ADMB models
-ASSAMC::run_em(
-  em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS"),
-  input_list = sim_input,
-  em_input_filenames = data.frame(
-    ASAP = "C0",
-    SS = "C1", 
-    BAM = "C0"
+runtime <- system.time({
+  ASSAMC::run_em(
+    em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS"),
+    input_list = sim_input,
+    em_input_filenames = data.frame(
+      ASAP = "C0",
+      SS = "C1", 
+      BAM = "C0"
+    )
   )
-)
+})
 
 # Reset the directory
 setwd(project_dir)
