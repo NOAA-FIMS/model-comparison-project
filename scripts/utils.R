@@ -36,14 +36,19 @@ install_wine_on_linux <- function() {
 install_required_packages <- function() {
   # Install the required R packages
   install.packages("pak")
-  pak::pkg_install(c(
-    "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems",
-    "NOAA-FIMS/FIMS",
-    "timjmiller/wham",
-    "httr",
-    "parallel",
-    "doParallel"
-  ))
+  pak::pkg_install(
+    c(
+      "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems",
+      "NOAA-FIMS/FIMS",
+      "timjmiller/wham",
+      "httr",
+      "parallel",
+      "doParallel",
+      "googledrive",
+      "gargle"
+    ), 
+    ask = FALSE
+  )
   
   # Download the EM input files required for the model comparison project, including
   # source code .tpl files for model compilation, input data files, and configuration

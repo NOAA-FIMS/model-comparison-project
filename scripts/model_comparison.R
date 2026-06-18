@@ -2,7 +2,6 @@
 # The code runs operating model (OM), and 7 estimation models (EM), and conduct
 # convergence analysis as well as compare estimates.
 
-
 # System and directory setup ----------------------------------------------
 
 # Load custom helper functions and plotting utilities
@@ -18,6 +17,16 @@ install_required_packages()
 library(parallel)
 library(doParallel)
 library(FIMS)
+
+# Code to connect Google Cloud Workstation with Google Drive and then upload raw outputs there
+email <- "bai.li@noaa.gov"
+
+googledrive::drive_auth(
+  token = gargle::credentials_user_oauth2(
+    scopes = "https://www.googleapis.com/auth/drive", 
+    email = email
+  )
+)
 
 # Define directories
 maindir <- getwd()
@@ -65,6 +74,32 @@ runtime <- system.time({
 
 # Reset the directory
 setwd(project_dir)
+
+# Upload raw outputs to Google Drive
+local_folder_to_zip <- file.path(getwd(), "C0")
+zip_file_name <- "results.zip"
+
+# Compress the folder (handles all nested subfolders automatically)
+message("Compressing folder and all subfolders...")
+utils::zip(
+  zipfile = zip_file_name, 
+  files = local_folder_to_zip,
+  flags = "-r9X" # High compression flags
+)
+
+# Upload the single zip file to Google Drive
+target_drive_id <- "1NnaW0_n-pjlGlxGdLOO09B4veF2--vGx" # Google Drive folder ID
+
+message("Uploading zip file to Google Drive...")
+uploaded_file <- googledrive::drive_upload(
+  media = zip_file_name,
+  path = googledrive::as_id(target_drive_id),
+  name = zip_file_name,
+  overwrite = TRUE
+)
+
+# Print the Google Drive ID of the zipped file (Save this for downloading later!)
+message(paste("Success! Zipped File Drive ID is:", uploaded_file[["id"]]))
 
 # Load outputs from all simulations
 all_data <- read_output_data(
