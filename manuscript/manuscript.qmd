@@ -139,8 +139,8 @@ knitr::include_graphics("../C0/figure/recruit_all_em_vs_om.png")
 
 ```{r}
 #| label: fig-fishing-mortality-boxplot
-#| fig-cap: "Relative error (RE) in fishing mortality over time from each estimation model (EM). Each facet represents one year from 1 to 30, and within each facet, seven boxplots show REs across 100 simulation replicates for the EMs: ASAP, BAM, SS3, WHAM with fixed effects, WHAM with random effects, FIMS with fixed effects, and FIMS with random effects."
-#| fig-alt: "Panel of 30 facets showing relative error (RE) in fishing mortality for years 1 to 30. Within each facet, seven boxplots represent the distribution of relative errors across 100 simulations for each EM: ASAP, BAM, SS3, WHAM with fixed effects, WHAM with random effects, FIMS with fixed effects, and FIMS with random effects. Boxplots show the median, interquartile range, and outliers, illustrating the bias and variability of each EM over time."
+#| fig-cap: "Relative error (RE) in fishing mortality over time from each estimation model (EM). Each facet represents one year from 1 to 30, and within each facet, nine boxplots show REs across 100 simulation replicates for the EMs: ASAP, BAM, SS3, WHAM with fixed effects, WHAM with random effects, FIMS with fixed effects, and FIMS with random effects."
+#| fig-alt: "Panel of 30 facets showing relative error (RE) in fishing mortality for years 1 to 30. Within each facet, nine boxplots represent the distribution of relative errors across 100 simulations for each EM: ASAP, BAM, SS3, WHAM with fixed effects, WHAM with random effects, FIMS with fixed effects, and FIMS with random effects. Boxplots show the median, interquartile range, and outliers, illustrating the bias and variability of each EM over time."
 #| fig-width: 15
 #| fig-height: 20
 #| fig-align: center
@@ -152,7 +152,7 @@ knitr::include_graphics("../C0/figure/re_boxplot_f.png")
 ```{r}
 #| label: fig-spawning-biomass-violin 
 #| fig-cap: "Distribution of relative error (RE) in spawning biomass across all years and 100 simulation replicates for each estimation model (EM). Violin plots summarize the full distribution of REs for ASAP, BAM, SS3, WHAM with fixed effects, WHAM with random effects, FIMS with fixed effects, and FIMS with random effects."
-#| fig-alt: "Violin plot showing the distribution of relative error (RE) in spawning biomass for seven estimation models: ASAP, BAM, SS3, WHAM with fixed effects, WHAM with random effects, FIMS with fixed effects, and FIMS with random effects. Each violin represents REs across all years and 100 simulations. The distributions are centered near zero and have similar shapes."
+#| fig-alt: "Violin plot showing the distribution of relative error (RE) in spawning biomass for nine estimation models: ASAP, BAM, SS3, WHAM with fixed effects, WHAM with random effects, FIMS with fixed effects, and FIMS with random effects. Each violin represents REs across all years and 100 simulations. The distributions are centered near zero and have similar shapes."
 #| fig-width: 15
 #| fig-height: 20
 #| fig-align: center
@@ -166,7 +166,7 @@ knitr::include_graphics("../C0/figure/re_sb.png")
 ```{r}
 #| label: tbl-mre
 #| tbl-cap: "Mean of Median Relative Error (MRE; %) for key assessment metrics. 95% confidence intervals (mre_lower, mre_upper) and standard deviation (sd_mre) are calculated across 100 converged simulation replicates."
-#| tbl-alt: "Table summarizing the Median Relative Error (MRE) for seven estimation models across three metrics: fishing mortality, recruitment, and spawning biomass."
+#| tbl-alt: "Table summarizing the Median Relative Error (MRE) for nine estimation models across three metrics: fishing mortality, recruitment, and spawning biomass."
 #| echo: false
 
 # Read the data
@@ -181,7 +181,7 @@ knitr::kable(mre_data, format = "pipe")
 ```{r}
 #| label: tbl-mare
 #| tbl-cap: "Median absolute relative error (MARE; %) in fishing mortality, recruitment, and spawning biomass. Metrics include MARE with 95% confidence intervals (mare_lower and mare_upper), mean absolute relative error (mean_are), and the standard deviation of absolute relative error (sd_are) calculated across all years and 100 simulation replicates (n = 3000 observations per metric)."
-#| tbl-alt: "Table summarizing estimation performance for seven estimation models: ASAP, BAM, SS3, WHAM with fixed effects, WHAM with random effects, FIMS with fixed effects, and FIMS with random effects. Metrics include MARE with 95% confidence intervals (mare_lower and mare_upper), mean absolute relative error (mean_are), and the standard deviation of absolute relative error (sd_are) calculated across all years and 100 simulation replicates (n = 3000 observations per metric)."
+#| tbl-alt: "Table summarizing estimation performance for nine estimation models: ASAP, BAM, SS3, WHAM with fixed effects, WHAM with random effects, FIMS with fixed effects, and FIMS with random effects. Metrics include MARE with 95% confidence intervals (mare_lower and mare_upper), mean absolute relative error (mean_are), and the standard deviation of absolute relative error (sd_are) calculated across all years and 100 simulation replicates (n = 3000 observations per metric)."
 #| echo: false
 
 # Read the CSV data 
@@ -198,7 +198,7 @@ knitr::kable(
 
 ```{r}
 #| label: tbl-convergence-rates
-#| tbl-cap: "Convergence success for 500 simulations across seven estimation model (EM) configurations. Convergence was defined as a positive-definite Hessian matrix and a maximum gradient component threshod."
+#| tbl-cap: "Convergence success for 500 simulations across nine estimation model (EM) configurations. Convergence was defined as a positive-definite Hessian matrix and a maximum gradient component threshod."
 #| tbl-alt: "Table showing convergence rates for ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects). Columns include total simulations, converged simulations, and the convergence rate."
 #| echo: false
 
@@ -221,7 +221,7 @@ knitr::kable(convergence_rates, format = "pipe")
 
 ```{r}
 #| label: fig-q-convergence
-#| fig-cap: "Centered Median Absolute Relative Errors (MAREs) ($MARE_i - MARE_{500}$, where $i$ = number of simulations used in calculation) of catchability ($q$) versus the number of replicates included in the calculation. Results are shown for seven estimation models: ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects)."
+#| fig-cap: "Centered Median Absolute Relative Errors (MAREs) ($MARE_i - MARE_{500}$, where $i$ = number of simulations used in calculation) of catchability ($q$) versus the number of replicates included in the calculation. Results are shown for nine estimation models: ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects)."
 #| fig-alt: "Line plot showing the centered Median Absolute Relative Errors of catchability converging toward zero as the number of simulations increases from 1 to 500. Different colored lines represent different estimation models, all stabilizing within a narrow range after approximately 100 to 200 iterations."
 #| fig-width: 14
 #| fig-height: 12
@@ -229,6 +229,55 @@ knitr::kable(convergence_rates, format = "pipe")
 #| out-width: 100%
 #| echo: false
 knitr::include_graphics("../C0/figure/q_convergence.png")
+```
+
+```{r}
+#| label: fig-se-boxplot-sb
+#| fig-cap: "Standard errors of spawning biomass estimates across different estimation models."
+#| fig-alt: "Boxplot showing the distribution of standard errors of spawning biomass estimates for different estimation models."
+#| fig-width: 14
+#| fig-height: 12
+#| fig-align: center
+#| out-width: 100%
+#| echo: false
+knitr::include_graphics("../C0/figure/se_boxplot_sb.png")
+```
+
+```{r}
+#| label: fig-se-boxplot-recruitment
+#| fig-cap: "Standard errors of recruitment estimates across different estimation models."
+#| fig-alt: "Boxplot showing the distribution of standard errors of recruitment estimates for different estimation models."
+#| fig-width: 14
+#| fig-height: 12
+#| fig-align: center
+#| out-width: 100%
+#| echo: false
+knitr::include_graphics("../C0/figure/se_boxplot_recruit.png")
+```
+
+```{r}
+#| label: fig-se-boxplot-f
+#| fig-cap: "Standard errors of fishing mortality estimates across different estimation models."
+#| fig-alt: "Boxplot showing the distribution of standard errors of fishing mortality estimates for different estimation models."
+#| fig-width: 14
+#| fig-height: 12
+#| fig-align: center
+#| out-width: 100%
+#| echo: false
+knitr::include_graphics("../C0/figure/se_boxplot_f.png")
+```
+
+```{r}
+#| label: tbl-run-time-summary
+#| tbl-cap: "Run time summary for 500 simulations across nine estimation model (EM) configurations."
+#| tbl-alt: "Table showing run time summary for ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects). Columns include total simulations, total run time, and the average run time per simulation."
+#| echo: false
+
+# Read the convergence data
+run_time_summary <- read.csv("../C0/figure/runtime_summary.csv")
+
+# Display the data as a table
+knitr::kable(run_time_summary, format = "pipe")
 ```
 
 # References {-}

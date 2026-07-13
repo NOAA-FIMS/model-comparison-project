@@ -70,8 +70,9 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
       tibble::as_tibble() |> 
       dplyr::mutate(
         sim_dir = file.path(case_dir, "output", model, paste0("s", sim)),
-        fit_file_fixed = file.path(sim_dir, "fit_wham_fixed_effects.RDS"),
+        fit_file_fixed = file.path(sim_dir, "fit_wham_fixed_effects_logNAA.RDS"),
         fit_file_random = file.path(sim_dir, "fit_wham_random_effects.RDS"),
+        fit_file_random_sigmaR_constant = file.path(sim_dir, "fit_wham_random_effects_sigmaR_constant.RDS"),
         # Load WHAM fixed effects gradient and positive_hessian
         convergence_fixed = purrr::map_dbl(fit_file_fixed, ~{
           if (file.exists(.x)) {
@@ -115,22 +116,53 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
           } else {
             NA
           }
+        }),
+        # Load WHAM random effects sigma constant gradient and positive_hessian
+        convergence_random_sigmaR_constant = purrr::map_dbl(fit_file_random_sigmaR_constant, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              fit <- readRDS(.x)
+              max(abs(fit[["final_gradient"]]))
+            }, error = function(e) NA_real_)
+          } else {
+            NA_real_
+          }
+        }),
+        positive_hessian_random_sigmaR_constant = purrr::map_lgl(fit_file_random_sigmaR_constant, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              fit <- readRDS(.x)
+              # positive_hessian is TRUE if na_sdrep is FALSE
+              !fit[["na_sdrep"]]
+            }, error = function(e) NA)
+          } else {
+            NA
+          }
         })
       ) |>
-      dplyr::select(sim, convergence_fixed, convergence_random, positive_hessian_fixed, positive_hessian_random) |>
+      dplyr::select(
+        sim, 
+        convergence_fixed, 
+        convergence_random,
+        convergence_random_sigmaR_constant,
+        positive_hessian_fixed, 
+        positive_hessian_random,
+        positive_hessian_random_sigmaR_constant
+      ) |>
       # Reshape to long format: one row per effect type per simulation
       # This allows tracking fixed and random effects convergence separately
       # Uses names_pattern to reshape both convergence and positive_hessian columns together
       tidyr::pivot_longer(
-        cols = c(convergence_fixed, convergence_random, positive_hessian_fixed, positive_hessian_random),
+        cols = c(convergence_fixed, convergence_random, convergence_random_sigmaR_constant, positive_hessian_fixed, positive_hessian_random, positive_hessian_random_sigmaR_constant),
         names_to = c(".value", "effect_type"),
-        names_pattern = "(.+)_(fixed|random)"
+        names_pattern = "^(.+)_(random_sigmaR_constant|random|fixed|)$"
       ) |>
       dplyr::mutate(
         # Create descriptive model names for each effect type
         model = dplyr::case_when(
           effect_type == "fixed" ~ "WHAM_fixed_effects",
           effect_type == "random" ~ "WHAM_random_effects",
+          effect_type == "random_sigmaR_constant" ~ "WHAM_random_sigmaR_constant",
           TRUE ~ "WHAM"
         ),
         # Rename convergence column to gradient for consistency with other models
@@ -154,12 +186,24 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
       tibble::as_tibble() |> 
       dplyr::mutate(
         sim_dir = file.path(case_dir, "output", model, paste0("s", sim)),
-        fit_file_fixed = file.path(sim_dir, "fit_fims_fixed_effects.RDS"),
-        fit_file_random = file.path(sim_dir, "fit_fims_random_effects.RDS"),
+        optimizer_file_fixed = file.path(sim_dir, "optimizer_convergence_fims_fixed_effects.RDS"),
+        optimizer_file_random = file.path(sim_dir, "optimizer_convergence_fims_random_effects.RDS"),
+        optimizer_file_random_sigmaR_constant = file.path(sim_dir, "optimizer_convergence_fims_random_effects_sigmaR_constant.RDS"),
         gradient_file_fixed = file.path(sim_dir, "max_gradient_fims_fixed_effects.RDS"),
         gradient_file_random = file.path(sim_dir, "max_gradient_fims_random_effects.RDS"),
+        gradient_file_random_sigmaR_constant = file.path(sim_dir, "max_gradient_fims_random_effects_sigmaR_constant.RDS"),
         hessian_file_fixed = file.path(sim_dir, "hessian_fims_fixed_effects.RDS"),
         hessian_file_random = file.path(sim_dir, "hessian_fims_random_effects.RDS"),
+        hessian_file_random_sigmaR_constant = file.path(sim_dir, "hessian_fims_random_effects_sigmaR_constant.RDS"),
+        optimizer_convergence_fixed = purrr::map_dbl(optimizer_file_fixed, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA)
+          } else {
+            NA
+          }
+        }),
         # Load FIMS fixed effects maximum gradient
         gradient_fixed = purrr::map_dbl(gradient_file_fixed, ~{
           if (file.exists(.x)) {
@@ -170,7 +214,7 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
             NA_real_
           }
         }),
-        # Load Hession for fix effects models
+        # Load Hessian for fixed effects models
         positive_hessian_fixed = purrr::map_lgl(hessian_file_fixed, ~{
           if (file.exists(.x)) {
             tryCatch({
@@ -181,6 +225,15 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
           }
         }),
         # Load FIMS random effects maximum gradient
+        optimizer_convergence_random = purrr::map_lgl(optimizer_file_random, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA)
+          } else {
+            NA
+          }
+        }),
         gradient_random = purrr::map_dbl(gradient_file_random, ~{
           if (file.exists(.x)) {
             tryCatch({
@@ -190,8 +243,37 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
             NA_real_
           }
         }),
-        # Load Hession for random effects models
+        # Load Hessian for random effects models
         positive_hessian_random = purrr::map_lgl(hessian_file_random, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA)
+          } else {
+            NA
+          }
+        }),
+        # Load FIMS random effects sigma constant maximum gradient
+        optimizer_convergence_random_sigmaR_constant = purrr::map_lgl(optimizer_file_random_sigmaR_constant, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA)
+          } else {
+            NA
+          }
+        }),
+        gradient_random_sigmaR_constant = purrr::map_dbl(gradient_file_random_sigmaR_constant, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA_real_)
+          } else {
+            NA_real_
+          }
+        }),
+        # Load Hessian for random effects sigma constant models
+        positive_hessian_random_sigmaR_constant = purrr::map_lgl(hessian_file_random_sigmaR_constant, ~{
           if (file.exists(.x)) {
             tryCatch({
               readRDS(.x)
@@ -203,27 +285,30 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
       ) |>
       dplyr::select(
         sim, 
-        gradient_fixed, gradient_random, 
-        positive_hessian_fixed, positive_hessian_random
+        optimizer_convergence_fixed, optimizer_convergence_random, optimizer_convergence_random_sigmaR_constant,
+        gradient_fixed, gradient_random, gradient_random_sigmaR_constant,
+        positive_hessian_fixed, positive_hessian_random, positive_hessian_random_sigmaR_constant
       ) |>
       # Reshape to long format: one row per effect type per simulation
       tidyr::pivot_longer(
         cols = c(
-          gradient_fixed, gradient_random,
-          positive_hessian_fixed, positive_hessian_random
+          optimizer_convergence_fixed, optimizer_convergence_random, optimizer_convergence_random_sigmaR_constant,
+          gradient_fixed, gradient_random, gradient_random_sigmaR_constant,
+          positive_hessian_fixed, positive_hessian_random, positive_hessian_random_sigmaR_constant
         ),
         names_to = c(".value", "effect_type"),
-        names_pattern = "(.+)_(fixed|random)"
+        names_pattern = "^(.+)_(random_sigmaR_constant|random|fixed|)$"
       ) |>
       dplyr::mutate(
         # Create descriptive model names for each effect type
         model = dplyr::case_when(
           effect_type == "fixed" ~ "FIMS_fixed_effects",
           effect_type == "random" ~ "FIMS_random_effects",
+          effect_type == "random_sigmaR_constant" ~ "FIMS_random_effects_sigmaR_constant",
           TRUE ~ "FIMS"
         )
       ) |>
-      dplyr::select(sim, model, positive_hessian, gradient)
+      dplyr::select(sim, model, positive_hessian, gradient, optimizer_convergence)
     
     results <- dplyr::bind_rows(results, fims_results)
   }
@@ -234,15 +319,20 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
       model = factor(
         model, 
         levels = c(
-          "ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", 
-          "FIMS_fixed_effects", "FIMS_random_effects"
+          "ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_sigmaR_constant",
+          "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
         )
       )
     ) |>
     dplyr::group_by(model) |>
     dplyr::summarize(
       total_simulations = dplyr::n(),
-      converged_simulations = sum(positive_hessian == TRUE & gradient <= ifelse(is.null(names(gradient_threshold)), gradient_threshold, gradient_threshold[model]), na.rm = TRUE),
+      converged_simulations = sum(
+        positive_hessian == TRUE & 
+        gradient <= ifelse(is.null(names(gradient_threshold)), gradient_threshold, gradient_threshold[model]) &
+        (!grepl("^FIMS", model) | (!is.na(optimizer_convergence) & optimizer_convergence == 0)),
+        na.rm = TRUE
+      ),
       convergence_rate = converged_simulations / total_simulations * 100,
       .groups = "drop"
     ) |>
@@ -274,7 +364,7 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
   # Group by model to get a list of converged simulation IDs for each
   converged_by_model <- results |> 
     dplyr::left_join(threshold_df, by = "model") |>
-    dplyr::filter(positive_hessian == TRUE & gradient <= threshold) |>
+    dplyr::filter(positive_hessian == TRUE & gradient <= threshold & (!grepl("^FIMS", model) | (!is.na(optimizer_convergence) & optimizer_convergence == 0))) |>
     dplyr::group_by(model) |> 
     dplyr::summarise(converged_sims = list(sim), .groups = "drop")
   

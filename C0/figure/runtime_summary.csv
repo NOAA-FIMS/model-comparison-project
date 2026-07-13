@@ -1,0 +1,10 @@
+"model","total_simulations","recorded_runtimes","mean_runtime_sec","median_runtime_sec","min_runtime_sec","max_runtime_sec"
+"ASAP",500,500,2.7,2.72,1.8,3.34
+"BAM",500,500,2.88,2.88,2.02,4.13
+"SS3",500,500,19.8,19.91,13.2,23.69
+"WHAM_fixed_effects",500,500,0.01,0.01,0,0.01
+"WHAM_random_effects",500,500,0.45,0.45,0.21,0.74
+"WHAM_random_effects_sigmaR_constant",500,500,0.43,0.43,0.2,0.69
+"FIMS_fixed_effects",500,500,1.91,1.7,0.92,4.66
+"FIMS_random_effects",500,500,17.78,17.17,7.84,31.82
+"FIMS_random_effects_sigmaR_constant",500,500,17.1,16.59,7.64,32.45

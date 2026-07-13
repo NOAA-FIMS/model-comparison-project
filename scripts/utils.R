@@ -45,7 +45,8 @@ install_required_packages <- function() {
       "parallel",
       "doParallel",
       "googledrive",
-      "gargle"
+      "gargle",
+      "r4ss/r4ss"
     ), 
     ask = FALSE
   )
@@ -95,4 +96,27 @@ install_required_packages <- function() {
     # Download the file
     download.file(url, destfile = destination_path, mode = "wb")
   }
+}
+
+# Unzip results.zip and move the contents to the appropriate directory
+unzip_results <- function() {
+  # Define paths
+  zip_file <- "results.zip"
+  target_prefix <- fs::path("home", "user", "model-comparison-project", "C0", "output")  # Adjusted for cross-platform compatibility
+
+  # List and filter files inside the zip
+  zip_contents <- unzip(zip_file, list = TRUE)[["Name"]]
+  files_to_extract <- grep(paste0("^", target_prefix), zip_contents, value = TRUE)
+
+  # Extract the files
+  unzip(zip_file, files = files_to_extract, exdir = ".")
+
+  # INSTANTLY move the extracted output folder to the main project directory
+  new_folder_path <- fs::path("C0", "output")
+
+  dir.create(new_folder_path, showWarnings = FALSE, recursive = TRUE)
+  file.rename(from = target_prefix, to = new_folder_path)
+
+  # Clean up the empty leftover 'home' folder structure
+  unlink("home", recursive = TRUE)
 }

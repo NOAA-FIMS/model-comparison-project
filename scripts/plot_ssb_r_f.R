@@ -10,9 +10,11 @@ model_colors <- c(
   "BAM" = "#D55E00",          # Vermillion
   "SS3" = "#0072B2",           # Blue
   "WHAM_fixed_effects" = "#CC79A7",   # Reddish purple
-  "WHAM_random_effects" = "#882255",  # Dark reddish purple
+  "WHAM_random_effects" = "#AA4499",  # Medium reddish purple
+  "WHAM_random_effects_sigmaR_constant" = "#882255",  # Dark reddish purple
   "FIMS_fixed_effects" = "#E69F00",   # Orange
-  "FIMS_random_effects" = "#CC7700"   # Dark orange
+  "FIMS_random_effects" = "#DD9933",  # Medium dark orange
+  "FIMS_random_effects_sigmaR_constant" = "#CC7700"   # Dark orange
 )
 
 #' Read OM and EM outputs data in tidy format
@@ -53,13 +55,23 @@ read_output_data <- function(
       simulation = sim_id,
       year = seq_len(env[["om_input"]][["nyr"]]),
       spawning_biomass = env[["om_output"]][["SSB"]],
+      spawning_biomass_se = NA,
       recruitment = env[["om_output"]][["N.age"]][, 1] / 1000,
+      recruitment_se = NA,
       abundance = rowSums(env[["om_output"]][["N.age"]]) / 1000,
+      abundance_se = NA,
       fishing_mortality = apply(env[["om_output"]][["FAA"]], 1, max),
+      fishing_mortality_se = NA,
       catchability = env[["om_output"]][["survey_q"]][["survey1"]]
     ) |>
       tidyr::pivot_longer(
-        cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+        cols = c(
+          spawning_biomass, spawning_biomass_se, 
+          recruitment, recruitment_se, 
+          abundance, abundance_se,
+          fishing_mortality, fishing_mortality_se, 
+          catchability
+        ),
         names_to = "metric",
         values_to = "value"
       )
@@ -72,6 +84,12 @@ read_output_data <- function(
       if (!file.exists(rdat_file)) return(NULL)
       
       asap_output <- dget(rdat_file)
+      asap_std <- read.table(
+        file.path(output_dir, "ASAP", paste0("s", sim_id), "asap3.std"), 
+        header = FALSE,
+        skip = 1, 
+        stringsAsFactors = FALSE
+      )
       
       tibble::tibble(
         case = case_name,
@@ -79,13 +97,28 @@ read_output_data <- function(
         simulation = sim_id,
         year = seq_along(asap_output[["SSB"]]),
         spawning_biomass = asap_output[["SSB"]],
+        spawning_biomass_se = asap_std |>
+          dplyr::filter(V2 == "SSB") |>
+          dplyr::pull(V4),
         recruitment = asap_output[["N.age"]][, 1],
+        recruitment_se = asap_std |>
+          dplyr::filter(V2 == "recruits") |>
+          dplyr::pull(V4),
         abundance = rowSums(asap_output[["N.age"]]),
+        abundance_se = NA,
         fishing_mortality = apply(asap_output[["fleet.FAA"]][["FAA.directed.fleet1"]], 1, max),
+        fishing_mortality_se = asap_std |>
+          dplyr::filter(V2 == "Freport") |>
+          dplyr::pull(V4),
         catchability = asap_output[["q.indices"]]/1000
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+          cols = c(
+            spawning_biomass, spawning_biomass_se,
+            recruitment, recruitment_se,
+            abundance, abundance_se,
+            fishing_mortality, fishing_mortality_se,
+            catchability),
           names_to = "metric",
           values_to = "value"
         )
@@ -99,6 +132,7 @@ read_output_data <- function(
       if (!file.exists(rdat_file)) return(NULL)
       
       bam_output <- dget(rdat_file)
+      
       env <- new.env()
       load(file.path(output_dir, "OM", paste0("OM", sim_ids[1], ".RData")), envir = env)
       nyr <- env[["om_input"]][["nyr"]]
@@ -109,13 +143,23 @@ read_output_data <- function(
         simulation = sim_id,
         year = seq_len(nyr),
         spawning_biomass = bam_output[["t.series"]][["SSB"]][1:nyr],
+        spawning_biomass_se = NA,
         recruitment = bam_output[["t.series"]][["recruits"]][1:nyr] / 1000,
+        recruitment_se = NA,
         abundance = rowSums(bam_output[["N.age"]][1:nyr, ]) / 1000,
+        abundance_se = NA,
         fishing_mortality = bam_output[["t.series"]][["F.full"]][1:nyr],
+        fishing_mortality_se = NA,
         catchability = bam_output[["parms"]][["q.survey1"]]
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+          cols = c(
+            spawning_biomass, spawning_biomass_se,
+            recruitment, recruitment_se,
+            abundance, abundance_se,
+            fishing_mortality, fishing_mortality_se,
+            catchability
+          ),
           names_to = "metric",
           values_to = "value"
         )
@@ -128,7 +172,13 @@ read_output_data <- function(
       ss_dir <- file.path(output_dir, "SS", paste0("s", sim_id))
       if (!dir.exists(ss_dir)) return(NULL)
       
-      ss_output <- r4ss::SS_output(dir = ss_dir, ncols = 300, verbose = FALSE, printstats = FALSE)
+      ss_output <- r4ss::SS_output(dir = ss_dir, verbose = FALSE, printstats = FALSE)
+      ss_std <- read.table(
+        file.path(ss_dir, "ss.std"), 
+        header = FALSE,
+        skip = 1, 
+        stringsAsFactors = FALSE
+      )
       
       # Get year range from first OM file
       env <- new.env()
@@ -150,9 +200,21 @@ read_output_data <- function(
         simulation = sim_id,
         year = seq_along(ss_ts[["SpawnBio"]]),
         spawning_biomass = ss_ts[["SpawnBio"]],
+        spawning_biomass_se = ss_std |>
+          dplyr::filter(V2 == "SSB_std") |>
+          dplyr::slice(3:(length(year_range)+2)) |>
+          dplyr::pull(V4),
         recruitment = ss_natage[[5]],
+        recruitment_se = ss_std |>
+          dplyr::filter(V2 == "recr_std") |>
+          dplyr::slice(2:(length(year_range)+1)) |>
+          dplyr::pull(V4),
         abundance = abundance_ss,
-        fishing_mortality = ss_ts[["F:_1"]], 
+        abundance_se = NA,  
+        fishing_mortality = ss_ts[["F:_1"]],
+        fishing_mortality_se = ss_std |>
+          dplyr::filter(grepl("F_rate", V2)) |>
+          dplyr::pull(V4),
         catchability = ss_output[["estimated_non_dev_parameters"]] |>
           tibble::rownames_to_column("parameter") |>
           dplyr::filter(parameter == "LnQ_base_SURVEY1(2)") |>
@@ -160,7 +222,13 @@ read_output_data <- function(
           exp() / 1000
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+          cols = c(
+            spawning_biomass, spawning_biomass_se,
+            recruitment, recruitment_se,
+            abundance, abundance_se,
+            fishing_mortality, fishing_mortality_se,
+            catchability
+          ),
           names_to = "metric",
           values_to = "value"
         )
@@ -170,11 +238,14 @@ read_output_data <- function(
   # Read WHAM data (fixed effects)
   if ("WHAM" %in% em_names) {
     wham_fixed_data <- purrr::map_dfr(sim_ids, function(sim_id) {
-      rds_file <- file.path(output_dir, "WHAM", paste0("s", sim_id), "fit_wham_fixed_effects.RDS")
+      rds_file <- file.path(output_dir, "WHAM", paste0("s", sim_id), "fit_wham_fixed_effects_logNAA.RDS")
       if (!file.exists(rds_file)) return(NULL)
       
       fit_wham <- readRDS(rds_file)
-      
+      wham_std <- fit_wham[["sdrep"]] |>
+        summary() |> 
+        tibble::as_tibble(rownames = "parameter")
+    
       # Extract F from FAA (fishing mortality at age)
       f_mort <- exp(fit_wham[["rep"]][["log_F_tot"]])
       
@@ -187,13 +258,45 @@ read_output_data <- function(
         simulation = sim_id,
         year = seq_along(fit_wham[["rep"]][["SSB"]]),
         spawning_biomass = fit_wham[["rep"]][["SSB"]],
+        spawning_biomass_se = wham_std |>
+          dplyr::filter(parameter == "log_SSB") |>
+          dplyr::mutate(
+            SSB = exp(Estimate),
+            `SE_natural` = SSB * `Std. Error`
+          ) |>
+          dplyr::pull(`SE_natural`),
         recruitment = fit_wham[["rep"]][["NAA"]][1, 1, , 1],
+        recruitment_se = wham_std |>
+          dplyr::filter(parameter == "log_N1") |>
+          dplyr::slice(1) |>
+          dplyr::bind_rows(
+            wham_std |> dplyr::filter(parameter == "log_NAA")
+          ) |>
+          dplyr::mutate(
+            NAA = exp(Estimate),
+            `SE_natural` = NAA * `Std. Error`
+          ) |>
+          dplyr::pull(`SE_natural`),
         abundance = abundance_wham,
+        abundance_se = NA,
         fishing_mortality = f_mort,
+        fishing_mortality_se = wham_std |>
+          dplyr::filter(parameter == "log_F_tot") |>
+          dplyr::mutate(
+            F_tot = exp(Estimate),
+            `SE_natural` = F_tot * `Std. Error`
+          ) |>
+          dplyr::pull(`SE_natural`),
         catchability = fit_wham[["rep"]][["q"]] / 1000
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+          cols = c(
+            spawning_biomass, spawning_biomass_se,
+            recruitment, recruitment_se,
+            abundance, abundance_se,
+            fishing_mortality, fishing_mortality_se,
+            catchability
+          ),
           names_to = "metric",
           values_to = "value"
         )
@@ -205,6 +308,9 @@ read_output_data <- function(
       if (!file.exists(rds_file)) return(NULL)
       
       fit_wham <- readRDS(rds_file)
+      wham_std <- fit_wham[["sdrep"]] |>
+        summary() |> 
+        tibble::as_tibble(rownames = "parameter")
       
       # Extract F from FAA (fishing mortality at age)
       f_mort <- exp(fit_wham[["rep"]][["log_F_tot"]])
@@ -218,13 +324,111 @@ read_output_data <- function(
         simulation = sim_id,
         year = seq_along(fit_wham[["rep"]][["SSB"]]),
         spawning_biomass = fit_wham[["rep"]][["SSB"]],
+        spawning_biomass_se = wham_std |>
+          dplyr::filter(parameter == "log_SSB") |>
+          dplyr::mutate(
+            SSB = exp(Estimate),
+            `SE_natural` = SSB * `Std. Error`
+          ) |>
+          dplyr::pull(`SE_natural`),
         recruitment = fit_wham[["rep"]][["NAA"]][1, 1, , 1],
+        recruitment_se = wham_std |>
+          dplyr::filter(parameter == "log_N1") |>
+          dplyr::slice(1) |>
+          dplyr::bind_rows(
+            wham_std |> dplyr::filter(parameter == "log_NAA")
+          ) |>
+          dplyr::mutate(
+            NAA = exp(Estimate),
+            `SE_natural` = NAA * `Std. Error`
+          ) |>
+          dplyr::pull(`SE_natural`),
         abundance = abundance_wham,
+        abundance_se = NA,
         fishing_mortality = f_mort, 
+        fishing_mortality_se = wham_std |>
+          dplyr::filter(parameter == "log_F_tot") |>
+          dplyr::mutate(
+            F_tot = exp(Estimate),
+            `SE_natural` = F_tot * `Std. Error`
+          ) |>
+          dplyr::pull(`SE_natural`),
         catchability = fit_wham[["rep"]][["q"]] / 1000
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+          cols = c(
+            spawning_biomass, spawning_biomass_se,
+            recruitment, recruitment_se,
+            abundance, abundance_se,
+            fishing_mortality, fishing_mortality_se,
+            catchability
+          ),
+          names_to = "metric",
+          values_to = "value"
+        )
+    })
+
+    # Read WHAM data (random effects with constant sigmaR)
+    wham_random_sigmaR_constant_data <- purrr::map_dfr(sim_ids, function(sim_id) {
+      rds_file <- file.path(output_dir, "WHAM", paste0("s", sim_id), "fit_wham_random_effects_sigmaR_constant.RDS")
+      if (!file.exists(rds_file)) return(NULL)
+      
+      fit_wham <- readRDS(rds_file)
+      wham_std <- fit_wham[["sdrep"]] |>
+        summary() |> 
+        tibble::as_tibble(rownames = "parameter")
+      
+      # Extract F from FAA (fishing mortality at age)
+      f_mort <- exp(fit_wham[["rep"]][["log_F_tot"]])
+      
+      # Extract total abundance (sum across ages)
+      abundance_wham <- apply(fit_wham[["rep"]][["NAA"]][1, 1, , ], 1, sum)
+      
+      tibble::tibble(
+        case = case_name,
+        model = "WHAM_random_effects_sigmaR_constant",
+        simulation = sim_id,
+        year = seq_along(fit_wham[["rep"]][["SSB"]]),
+        spawning_biomass = fit_wham[["rep"]][["SSB"]],
+        spawning_biomass_se = wham_std |>
+          dplyr::filter(parameter == "log_SSB") |>
+          dplyr::mutate(
+            SSB = exp(Estimate),
+            `SE_natural` = SSB * `Std. Error`
+          ) |>
+          dplyr::pull(`SE_natural`),
+        recruitment = fit_wham[["rep"]][["NAA"]][1, 1, , 1],
+        recruitment_se = wham_std |>
+          dplyr::filter(parameter == "log_N1") |>
+          dplyr::slice(1) |>
+          dplyr::bind_rows(
+            wham_std |> dplyr::filter(parameter == "log_NAA")
+          ) |>
+          dplyr::mutate(
+            NAA = exp(Estimate),
+            `SE_natural` = NAA * `Std. Error`
+          ) |>
+          dplyr::pull(`SE_natural`),
+        abundance = abundance_wham,
+        abundance_se = NA,
+        fishing_mortality = f_mort, 
+        fishing_mortality_se = wham_std |>
+          dplyr::filter(parameter == "log_F_tot") |>
+          dplyr::mutate(
+            F_tot = exp(Estimate),
+            `SE_natural` = F_tot * `Std. Error`
+          ) |>
+          dplyr::pull(`SE_natural`),
+        catchability = fit_wham[["rep"]][["q"]] / 1000
+      ) |>
+        tidyr::pivot_longer(
+          cols = c(
+            spawning_biomass, spawning_biomass_se,
+            recruitment, recruitment_se,
+            abundance, abundance_se,
+            fishing_mortality, fishing_mortality_se,
+            catchability
+          ),
           names_to = "metric",
           values_to = "value"
         )
@@ -247,21 +451,17 @@ read_output_data <- function(
       # Extract spawning biomass
       sb_data <- fims_output |>
         dplyr::filter(label == "spawning_biomass", year_i %in% 1:nyr) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated)
+        dplyr::arrange(year_i) 
       
       # Extract recruitment (first age)
       recruit_data <- fims_output |>
         dplyr::filter(label == "expected_recruitment", year_i %in% 1:nyr) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated) / 1000
+        dplyr::arrange(year_i)
       
       # Extract fishing mortality
       f_data <- fims_output |>
         dplyr::filter(label == "log_Fmort", year_i %in% 1:nyr, module_id == 1) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated) |>
-        exp()
+        dplyr::arrange(year_i) 
       
       # Extract total abundance (numbers at age)
       abundance_fims <- fims_output |>
@@ -282,14 +482,24 @@ read_output_data <- function(
         model = "FIMS_fixed_effects",
         simulation = sim_id,
         year = 1:nyr,
-        spawning_biomass = sb_data,
-        recruitment = recruit_data,
+        spawning_biomass = sb_data[["estimated"]],
+        spawning_biomass_se = sb_data[["uncertainty"]],
+        recruitment = recruit_data[["estimated"]] / 1000,
+        recruitment_se = recruit_data[["uncertainty"]] / 1000,
         abundance = abundance_fims,
-        fishing_mortality = f_data,
+        abundance_se = NA,
+        fishing_mortality = exp(f_data[["estimated"]]),
+        fishing_mortality_se = exp(f_data[["estimated"]]) * f_data[["uncertainty"]],
         catchability = catchability_fims
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+          cols = c(
+            spawning_biomass, spawning_biomass_se,
+            recruitment, recruitment_se, 
+            abundance, abundance_se, 
+            fishing_mortality, fishing_mortality_se, 
+            catchability
+          ),
           names_to = "metric",
           values_to = "value"
         )
@@ -310,21 +520,17 @@ read_output_data <- function(
       # Extract spawning biomass
       sb_data <- fims_output |>
         dplyr::filter(label == "spawning_biomass", year_i %in% 1:nyr) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated)
+        dplyr::arrange(year_i)
       
       # Extract recruitment (first age)
       recruit_data <- fims_output |>
         dplyr::filter(label == "expected_recruitment", year_i %in% 1:nyr) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated) / 1000
+        dplyr::arrange(year_i)
       
       # Extract fishing mortality
       f_data <- fims_output |>
         dplyr::filter(label == "log_Fmort", year_i %in% 1:nyr, module_id == 1) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated) |>
-        exp()
+        dplyr::arrange(year_i)
       
       # Extract total abundance (numbers at age)
       abundance_fims <- fims_output |>
@@ -345,14 +551,93 @@ read_output_data <- function(
         model = "FIMS_random_effects",
         simulation = sim_id,
         year = 1:nyr,
-        spawning_biomass = sb_data,
-        recruitment = recruit_data,
+        spawning_biomass = sb_data[["estimated"]],
+        spawning_biomass_se = sb_data[["uncertainty"]],
+        recruitment = recruit_data[["estimated"]] / 1000,
+        recruitment_se = recruit_data[["uncertainty"]] / 1000,
         abundance = abundance_fims,
-        fishing_mortality = f_data,
+        abundance_se = NA,
+        fishing_mortality = exp(f_data[["estimated"]]),
+        fishing_mortality_se = exp(f_data[["estimated"]]) * f_data[["uncertainty"]],
         catchability = catchability_fims
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+          cols = c(
+            spawning_biomass, spawning_biomass_se, 
+            recruitment, recruitment_se, 
+            abundance, abundance_se,
+            fishing_mortality, fishing_mortality_se, 
+            catchability
+          ),
+          names_to = "metric",
+          values_to = "value"
+        )
+    })
+
+    # Read FIMS data (random effects with constant sigmaR)
+    fims_random_sigmaR_constant_data <- purrr::map_dfr(sim_ids, function(sim_id) {
+      rds_file <- file.path(output_dir, "FIMS", paste0("s", sim_id), "fit_fims_random_effects_sigmaR_constant.RDS")
+      if (!file.exists(rds_file)) return(NULL)
+      
+      fims_output <- readRDS(rds_file)
+      
+      # Get year range from first OM file
+      env <- new.env()
+      load(file.path(output_dir, "OM", paste0("OM", sim_ids[1], ".RData")), envir = env)
+      nyr <- env[["om_input"]][["nyr"]]
+      
+      # Extract spawning biomass
+      sb_data <- fims_output |>
+        dplyr::filter(label == "spawning_biomass", year_i %in% 1:nyr) |>
+        dplyr::arrange(year_i)
+      
+      # Extract recruitment (first age)
+      recruit_data <- fims_output |>
+        dplyr::filter(label == "expected_recruitment", year_i %in% 1:nyr) |>
+        dplyr::arrange(year_i)
+      
+      # Extract fishing mortality
+      f_data <- fims_output |>
+        dplyr::filter(label == "log_Fmort", year_i %in% 1:nyr, module_id == 1) |>
+        dplyr::arrange(year_i)
+      
+      # Extract total abundance (numbers at age)
+      abundance_fims <- fims_output |>
+        dplyr::filter(label == "numbers_at_age", year_i %in% 1:nyr) |>
+        dplyr::group_by(year_i) |>
+        dplyr::summarize(total = sum(estimated), .groups = "drop") |>
+        dplyr::arrange(year_i) |>
+        dplyr::pull(total) / 1000
+      
+      # Extract catchability
+      catchability_fims <- fims_output |>
+        dplyr::filter(label == "log_q" & module_id == 2) |>
+        dplyr::pull(estimated) |>
+        exp()
+      
+      tibble::tibble(
+        case = case_name,
+        model = "FIMS_random_effects_sigmaR_constant",
+        simulation = sim_id,
+        year = 1:nyr,
+        spawning_biomass = sb_data[["estimated"]],
+        spawning_biomass_se = sb_data[["uncertainty"]],
+        recruitment = recruit_data[["estimated"]] / 1000,
+        recruitment_se = recruit_data[["uncertainty"]] / 1000,
+        abundance = abundance_fims,
+        abundance_se = NA,
+        fishing_mortality = exp(f_data[["estimated"]]),
+        fishing_mortality_se = exp(f_data[["estimated"]]) * f_data[["uncertainty"]],
+        catchability = catchability_fims
+      ) |>
+        tidyr::pivot_longer(
+          cols = c(
+            spawning_biomass, spawning_biomass_se, 
+            recruitment, recruitment_se, 
+            abundance, abundance_se,
+            fishing_mortality, fishing_mortality_se, 
+            catchability
+          ),
           names_to = "metric",
           values_to = "value"
         )
@@ -367,8 +652,10 @@ read_output_data <- function(
     ss_data,
     wham_fixed_data,
     wham_random_data,
+    wham_random_sigmaR_constant_data,
     fims_fixed_data,
-    fims_random_data
+    fims_random_data,
+    fims_random_sigmaR_constant_data
   )
 }
 
@@ -458,18 +745,23 @@ calc_centered_mare <- function(df, max_iter = max(df$simulation, na.rm = TRUE)) 
 #' @return ggplot object
 plot_convergence_analysis <- function(convergence_results, metric_label = "Catchability") {
   
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")
+  model_order <- c(
+    "ASAP", "BAM", "SS3", 
+    "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_effects_sigmaR_constant",
+    "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
+  )
   
   plot_data <- convergence_results |>
     dplyr::mutate(model = factor(model, levels = model_order))
-  
+
   ggplot2::ggplot(plot_data, ggplot2::aes(x = iteration, y = centered_mare, color = model, linetype = model, shape = model)) +
     ggplot2::geom_line(linewidth = 0.5) +
     ggplot2::geom_point(size = 1, alpha = 0.6) +
     ggplot2::coord_cartesian(ylim = c(-0.05, 0.05)) +
     ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "darkgray", linewidth = 0.8) +
     ggplot2::scale_color_manual(values = model_colors, drop = FALSE) +
-    ggplot2::scale_shape_manual(values = c(15, 16, 17, 18, 19, 8, 4), drop = FALSE) +
+    ggplot2::scale_shape_manual(values = c(15, 16, 17, 18, 19, 8, 4, 0, 2), drop = FALSE) +
+    ggplot2::scale_linetype_manual(values = c(1, 2, 3, 4, 5, 6, 1, 2, 3), drop = FALSE) +
     ggplot2::labs(
       title = paste0("Centered MARE over Iterations (", metric_label, ")"),
       x = "Number of Iterations",
@@ -504,7 +796,11 @@ plot_metric <- function(summary_data,
   plot_data <- summary_data |> dplyr::filter(metric == metric_name)
   
   # Define model ordering
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")
+  model_order <- c(
+    "ASAP", "BAM", "SS3", 
+    "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_effects_sigmaR_constant", 
+    "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
+  )
   
   # Separate OM
   if (include_om && !is.null(facet_by)) {
@@ -665,7 +961,14 @@ calculate_mre_summary <- function(re_data) {
       .groups = "drop"
     ) |>
     dplyr::mutate(
-      model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")),
+      model = factor(
+        model, 
+        levels = c(
+          "ASAP", "BAM", "SS3", 
+          "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_effects_sigmaR_constant",
+          "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
+        )
+      ),
       mre = round(mre, 2),
       mre_lower = round(mre_lower, 2),
       mre_upper = round(mre_upper, 2),
@@ -700,7 +1003,14 @@ calculate_mare_summary <- function(re_data) {
       .groups = "drop"
     ) |>
     dplyr::mutate(
-      model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")),
+      model = factor(
+        model, 
+        levels = c(
+          "ASAP", "BAM", "SS3", 
+          "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_effects_sigmaR_constant",
+          "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
+        )
+      ),
       mare = round(mare, 2),
       mare_lower = round(mare_lower, 2),
       mare_upper = round(mare_upper, 2),
@@ -729,8 +1039,11 @@ create_summed_metric_tables <- function(all_data,
   }
   
   # Define model ordering (excluding OM for RE calculation)
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", 
-                   "FIMS_fixed_effects", "FIMS_random_effects")
+  model_order <- c(
+    "ASAP", "BAM", "SS3", 
+    "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_effects_sigmaR_constant",
+    "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
+  )
   
   summed_tables <- list()
   
@@ -822,9 +1135,14 @@ summarize_summed_metric_tables <- function(summed_tables) {
     
     summary_list[[metric_name]] <- summary_data |>
       dplyr::mutate(
-        model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", 
-                                         "WHAM_random_effects", "FIMS_fixed_effects", 
-                                         "FIMS_random_effects")),
+        model = factor(
+          model, 
+          levels = c(
+            "ASAP", "BAM", "SS3", 
+            "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_effects_sigmaR_constant",
+            "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
+          )
+        ),
         mean_re = round(mean_re, 2),
         median_re = round(median_re, 2),
         median_lower = round(median_lower, 2),
@@ -851,7 +1169,11 @@ summarize_summed_metric_tables <- function(summed_tables) {
 plot_re_boxplot_by_year <- function(re_data, metric_filter = "spawning_biomass") {
   
   # Define model ordering
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")
+  model_order <- c(
+    "ASAP", "BAM", "SS3", 
+    "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_effects_sigmaR_constant",
+    "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
+  )
   
   plot_data <- re_data |> 
     dplyr::filter(metric %in% metric_filter) |>
@@ -891,6 +1213,58 @@ plot_re_boxplot_by_year <- function(re_data, metric_filter = "spawning_biomass")
     )
 }
 
+#' Plot distributions for SE of SB, R, and F over time by model (boxplots)
+#' 
+#' @param data Tidy data frame with SE values
+#' @param metric_filter Metric to plot ("spawning_biomass_se", "recruitment_se", or "fishing_mortality_se")
+#' @return ggplot object
+plot_se_boxplot_by_year <- function(data, metric_filter = "spawning_biomass_se") {
+  
+  # Define model ordering
+  model_order <- c(
+    "ASAP", "BAM", "SS3", 
+    "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_effects_sigmaR_constant",
+    "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
+  )
+  
+  plot_data <- data |>
+    dplyr::filter(model != "OM") |>
+    dplyr::filter(metric %in% metric_filter) |>
+    dplyr::mutate(
+      model = factor(model, levels = model_order),
+      case_label = case |>
+        stringr::str_remove("^case") |>
+        stringr::str_replace("^(\\d+)$", paste0("C", "\\1")),
+      metric_label = dplyr::case_when(
+        metric == "spawning_biomass_se" ~ "SE(Spawning Biomass)",
+        metric == "recruitment_se" ~ "SE(Recruitment)",
+        metric == "fishing_mortality_se" ~ "SE(Fishing Mortality)",
+        TRUE ~ metric
+      )
+    )
+  
+  ggplot2::ggplot(plot_data, ggplot2::aes(x = model, y = value[,1], fill = model)) +
+    ggplot2::geom_boxplot(outlier.size = 0.5, alpha = 0.7) +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+    ggplot2::facet_wrap(~year, ncol = 5) +
+    ggplot2::scale_fill_manual(values = model_colors) +
+    ggplot2::labs(
+      x = "Model",
+      y = "SE",
+      title = paste0("Standard Error Over Time: ", unique(plot_data$metric_label))
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      legend.position = "none",
+      panel.grid.minor = ggplot2::element_blank(),
+      strip.background = ggplot2::element_rect(fill = "white"),
+      strip.text = ggplot2::element_text(face = "bold", size = 9),
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1, size = 12),
+      axis.text.y = ggplot2::element_text(size = 12),
+      legend.text = ggplot2::element_text(size = 12)
+    )
+}
+
 #' Plot relative error distributions
 #'
 #' @param re_data Relative error data
@@ -899,7 +1273,11 @@ plot_re_boxplot_by_year <- function(re_data, metric_filter = "spawning_biomass")
 plot_re_violin <- function(re_data, metric_filter = "spawning_biomass") {
   
   # Define model ordering
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")
+  model_order <- c(
+    "ASAP", "BAM", "SS3", 
+    "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_effects_sigmaR_constant", 
+    "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
+  )
   
   plot_data <- re_data |> dplyr::filter(metric %in% metric_filter)
   
@@ -930,6 +1308,64 @@ plot_re_violin <- function(re_data, metric_filter = "spawning_biomass") {
       x = "Model",
       y = "Relative Error",
       title = "Relative Error Distributions"
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      legend.position = "none",
+      panel.grid.minor = ggplot2::element_blank(),
+      strip.background = ggplot2::element_rect(fill = "gray95"),
+      strip.text = ggplot2::element_text(face = "bold", size = 9),
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1, size = 12),
+      axis.text.y = ggplot2::element_text(size = 12),
+      legend.text = ggplot2::element_text(size = 12)
+    )
+}
+
+#' Plot distributions for SE of SB, R, and F
+#' 
+#' @param data Tidy data frame with SE values
+#' @return ggplot object
+plot_se_violin <- function(data) {
+  
+  # Define model ordering
+  model_order <- c(
+    "ASAP", "BAM", "SS3", 
+    "WHAM_fixed_effects", "WHAM_random_effects", "WHAM_random_effects_sigmaR_constant",
+    "FIMS_fixed_effects", "FIMS_random_effects", "FIMS_random_effects_sigmaR_constant"
+  )
+  
+  # Define the explicit row order for your metrics
+  row_order <- c("SE(Spawning Biomass)", "SE(Recruitment)", "SE(Fishing Mortality)")
+
+  plot_data <- data |>
+    dplyr::filter(model != "OM") |>
+    # 1. Keep all three target metrics instead of filtering for just one
+    dplyr::filter(metric %in% c("spawning_biomass_se", "recruitment_se", "fishing_mortality_se")) |>
+    dplyr::mutate(
+      model = factor(model, levels = model_order),
+      case_label = case |>
+        stringr::str_remove("^case") |>
+        stringr::str_replace("^(\\d+)$", paste0("C", "\\1")),
+      metric_label = dplyr::case_when(
+        metric == "spawning_biomass_se" ~ "SE(Spawning Biomass)",
+        metric == "recruitment_se" ~ "SE(Recruitment)",
+        metric == "fishing_mortality_se" ~ "SE(Fishing Mortality)",
+        TRUE ~ metric
+      ),
+      # 2. Force the exact vertical row layout sequence by setting factor levels
+      metric_label = factor(metric_label, levels = row_order)
+    )
+
+  ggplot2::ggplot(plot_data, ggplot2::aes(x = model, y = value[,1], fill = model)) +
+    ggplot2::geom_violin(alpha = 0.7) +
+    # FIXED: Removed coord_cartesian so scales = "free_y" can handle each row independently
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+    ggplot2::facet_grid(metric_label ~ case_label, scales = "free_y") +
+    ggplot2::scale_fill_manual(values = model_colors) +
+    ggplot2::labs(
+      x = "Model",
+      y = "Standard Error",
+      title = "Standard Error Distributions"
     ) +
     ggplot2::theme_bw() +
     ggplot2::theme(
@@ -1036,6 +1472,10 @@ create_ssb_r_f_plots <- function(main_dir,
     plots[["re_boxplot_abundance"]] <- plot_re_boxplot_by_year(all_re, "abundance")
     plots[["re_boxplot_f"]] <- plot_re_boxplot_by_year(all_re, "fishing_mortality")
   }
+
+  plots[["se_boxplot_sb"]] <- plot_se_boxplot_by_year(all_data, "spawning_biomass_se")
+  plots[["se_boxplot_recruit"]] <- plot_se_boxplot_by_year(all_data, "recruitment_se")
+  plots[["se_boxplot_f"]] <- plot_se_boxplot_by_year(all_data, "fishing_mortality_se")
   
   # Relative error plots
   if (!is.null(all_re) && nrow(all_re) > 0) {
@@ -1044,6 +1484,8 @@ create_ssb_r_f_plots <- function(main_dir,
     plots[["re_abundance"]] <- plot_re_violin(all_re, "abundance")
     plots[["re_f"]] <- plot_re_violin(all_re, "fishing_mortality")
   }
+
+  plots[["se_sb_recruitment_f"]] <- plot_se_violin(all_data)
   
   # Save plots and tables
   if (!is.null(output_dir)) {
@@ -1056,10 +1498,10 @@ create_ssb_r_f_plots <- function(main_dir,
       filename <- file.path(output_dir, paste0(name, ".png"))
       
       # Set dimensions based on plot type
-      if (stringr::str_detect(name, "^re_boxplot")) {
+      if (stringr::str_detect(name, "^(re|se)_boxplot")) {
         width <- 14
         height <- 12
-      } else if (stringr::str_detect(name, "^re_")) {
+      } else if (stringr::str_detect(name, "^(re|se)_")) {
         width <- 14
         height <- 12
       } else {
