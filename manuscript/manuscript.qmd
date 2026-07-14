@@ -21,6 +21,16 @@ author:
           city: Silver Spring
           state: MD
           postal-code: 20910
+  - name: Cole C. Monnahan
+    affiliations:
+        - id: noaa-afsc
+          name: National Marine Fisheries Service, National Oceanic and Atmospheric Administration
+          department: Resource Ecology and Fisheries Management Division
+          address: 7600 Sand Point Way NE
+          city: Seattle
+          state: WA
+          postal-code: 98115
+
 abstract: |
   As NOAA Fisheries transitions to next-generation stock assessment methods, including the Fisheries Integrated Modeling System (FIMS), it is important to evaluate how its performance compares with established modeling tools. Using an age-structured operating model, we compared FIMS estimates with four widely used assessment models in the United States. Comparisons with ADMB models, the Age Structured Assessment Program, Stock Synthesis, and the Beaufort Assessment Model, focused on verifying estimates of key assessment quantities, including spawning biomass, recruitment, and fishing mortality. Comparisons with the Woods Hole Assessment Model focused on evaluating the performance of random-effects configurations. Results indicate that estimates from FIMS are highly consistent with those from established modeling frameworks, with median relative error closely aligned across key metrics. Differences among models were generally minor and primarily associated with differences in the sum-to-zero constraint on recruitment deviations, equilibrium initialization for initial numbers-at-age, and recruitment bias correction. Overall, these findings demonstrate that FIMS provides a reliable and modular framework for U.S. fisheries stock assessment while maintaining high standards of estimation accuracy and enabling flexible random-effects modeling.
 keywords: 
