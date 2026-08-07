@@ -38,9 +38,10 @@ install_required_packages <- function() {
   install.packages("pak")
   pak::pkg_install(
     c(
-      # run_rceattle() is not on update-ems yet; it is under review in the
-      # branch below. Change this back to @update-ems once that PR merges.
-      "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems-w-Rceattle",
+      # Requires run_rceattle() on this branch. Until that PR merges, run_em()
+      # will skip "Rceattle" silently and its panels will be absent from every
+      # figure.
+      "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems",
       "NOAA-FIMS/FIMS",
       "timjmiller/wham",
       # Rceattle is a TMB model, so installing it compiles C++ and needs a
