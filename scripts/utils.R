@@ -47,8 +47,8 @@ install_required_packages <- function() {
       # Rceattle is a TMB model, so installing it compiles C++ and needs a
       # working toolchain. Pinned to a release tag rather than a branch: a
       # branch moves, and the manuscript's numbers must not move with it.
-      # v4.9.1 is commit 7d873ca7.
-      "grantdadams/Rceattle@v4.9.1",
+      # 4.9.1 is commit 7d873ca7.
+      "grantdadams/Rceattle@4.9.1",
       # TMBhelper is only in Rceattle's Suggests, so pak will NOT pull it in --
       # and Rceattle takes a different optimizer path when it is absent
       # (R/0-tmb_helpers.R), which would make fits depend on what happens to be
