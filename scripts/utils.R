@@ -38,13 +38,16 @@ install_required_packages <- function() {
   install.packages("pak")
   pak::pkg_install(
     c(
-      "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems",
+      # run_rceattle() is not on update-ems yet; it is under review in the
+      # branch below. Change this back to @update-ems once that PR merges.
+      "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems-w-Rceattle",
       "NOAA-FIMS/FIMS",
       "timjmiller/wham",
       # Rceattle is a TMB model, so installing it compiles C++ and needs a
-      # working toolchain. Branch pinned explicitly, as for the other GitHub
-      # sources, so the manuscript's results do not move with an upstream push.
-      "grantdadams/Rceattle@main",
+      # working toolchain. Pinned to a release tag rather than a branch: a
+      # branch moves, and the manuscript's numbers must not move with it.
+      # v4.9.0 is commit feaca5de.
+      "grantdadams/Rceattle@v4.9.0",
       # TMBhelper is only in Rceattle's Suggests, so pak will NOT pull it in --
       # and Rceattle takes a different optimizer path when it is absent
       # (R/0-tmb_helpers.R), which would make fits depend on what happens to be
