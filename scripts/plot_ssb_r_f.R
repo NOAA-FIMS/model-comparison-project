@@ -1,6 +1,7 @@
 # Plotting functions for spawning biomass, recruitment, fishing mortality, and 
 # abundance
-# Supports: ASAP, BAM, SS3, WHAM (fixed/random effects), FIMS (fixed/random effects)
+# Supports: ASAP, BAM, SS3, WHAM (fixed/random effects), FIMS (fixed/random
+# effects), Rceattle (fixed/random effects)
 
 # Model color scheme using Okabe-Ito colorblind-friendly palette
 # Reference: https://jfly.uni-koeln.de/color/
@@ -12,7 +13,12 @@ model_colors <- c(
   "WHAM_fixed_effects" = "#CC79A7",   # Reddish purple
   "WHAM_random_effects" = "#882255",  # Dark reddish purple
   "FIMS_fixed_effects" = "#E69F00",   # Orange
-  "FIMS_random_effects" = "#CC7700"   # Dark orange
+  "FIMS_random_effects" = "#CC7700",  # Dark orange
+  # Violet / indigo: the blue-violet family is the largest remaining gap in the
+  # palette. Nearest neighbour of either is SS3 (#0072B2) at CIE Lab dE 57 and
+  # 49, comfortably separable in a nine-series panel.
+  "Rceattle_fixed_effects" = "#785EF0",  # Violet
+  "Rceattle_random_effects" = "#332288"  # Indigo
 )
 
 #' Read OM and EM outputs data in tidy format
@@ -23,7 +29,7 @@ model_colors <- c(
 #' @return Tibble with columns: case, model, metric, year, simulation, value
 read_output_data <- function(
     main_dir, 
-    em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS"),
+    em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS", "Rceattle"),
     sim_ids = NULL
 ) {
   
@@ -41,7 +47,16 @@ read_output_data <- function(
     warning(paste0("No simulation IDs provided or found in: ", file.path(output_dir, "OM")))
     return(NULL)
   }
-  
+
+  # Each per-model block below assigns its own object, but the closing
+  # bind_rows() names all of them unconditionally. Initialising to NULL lets
+  # em_names hold a subset (e.g. just "Rceattle") without an
+  # "object not found" error; bind_rows() ignores NULL arguments.
+  asap_data <- bam_data <- ss_data <- NULL
+  wham_fixed_data <- wham_random_data <- NULL
+  fims_fixed_data <- fims_random_data <- NULL
+  rceattle_fixed_data <- rceattle_random_data <- NULL
+
   # Read OM data
   om_data <- purrr::map_dfr(sim_ids, function(sim_id) {
     env <- new.env()
@@ -123,6 +138,14 @@ read_output_data <- function(
   }
   
   # Read SS3 data
+  # r4ss is not installed by install_required_packages(), so this guard can skip
+  # SS3 entirely on a fresh environment. Say so out loud -- silently omitting a
+  # model from every figure is worse than failing.
+  if ("SS" %in% em_names && !requireNamespace("r4ss", quietly = TRUE)) {
+    warning("read_output_data(): 'SS' was requested but package 'r4ss' is not ",
+            "installed, so SS3 will be missing from every figure and table. ",
+            "Install r4ss, or drop \"SS\" from em_names.", call. = FALSE)
+  }
   if ("SS" %in% em_names && requireNamespace("r4ss", quietly = TRUE)) {
     ss_data <- purrr::map_dfr(sim_ids, function(sim_id) {
       ss_dir <- file.path(output_dir, "SS", paste0("s", sim_id))
@@ -358,9 +381,86 @@ read_output_data <- function(
         )
     })
   }
-  
+
+  # Read Rceattle data
+  # ASSAMC::run_rceattle() writes a tidy data.frame per scenario with columns
+  # label / year / age / estimate / uncertainty. The labels map onto the
+  # comparison metrics directly, so there is no unit conversion beyond the
+  # /1000 that recruitment and abundance take for every model. Rceattle
+  # reports numbers-at-age totals and an apical F, matching the OM's
+  # rowSums(N.age) and apply(FAA, 1, max). Its catchability is analytical
+  # (closed-form MLE) rather than a freely estimated log_q, but is on the same
+  # scale as the OM's survey_q.
+  #
+  # Rceattle also fits a third scenario (random_effects_sigmaR_constant); like
+  # FIMS's, it is not read here.
+  if ("Rceattle" %in% em_names) {
+    read_rceattle_scenario <- function(scenario, model_label) {
+      purrr::map_dfr(sim_ids, function(sim_id) {
+        rds_file <- file.path(output_dir, "Rceattle", paste0("s", sim_id),
+                              paste0("fit_rceattle_", scenario, ".RDS"))
+        if (!file.exists(rds_file)) return(NULL)
+
+        rceattle_output <- readRDS(rds_file)
+        # run_rceattle() writes NULL here when a fit errored or timed out.
+        # Check is.data.frame() first: nrow() on a non-data.frame is NULL, which
+        # would make the `||` error rather than skip.
+        if (!is.data.frame(rceattle_output) || nrow(rceattle_output) == 0) return(NULL)
+
+        # Get year range from first OM file
+        env <- new.env()
+        load(file.path(output_dir, "OM", paste0("OM", sim_ids[1], ".RData")), envir = env)
+        nyr <- env[["om_input"]][["nyr"]]
+
+        # Length-checked so a truncated, duplicated or missing label drops this
+        # one replicate with a warning rather than aborting the whole read --
+        # which at 500 replicates would throw away every other model's work too.
+        pull_label <- function(lab) {
+          v <- rceattle_output |>
+            dplyr::filter(label == lab, year %in% 1:nyr) |>
+            dplyr::arrange(year) |>
+            dplyr::pull(estimate)
+          if (length(v) != nyr) {
+            stop("label '", lab, "' has ", length(v), " rows, expected ", nyr,
+                 call. = FALSE)
+          }
+          v
+        }
+
+        tryCatch(
+          tibble::tibble(
+            case = case_name,
+            model = model_label,
+            simulation = sim_id,
+            year = 1:nyr,
+            spawning_biomass = pull_label("SSB"),
+            recruitment = pull_label("recruitment") / 1000,
+            abundance = pull_label("abundance") / 1000,
+            fishing_mortality = pull_label("F"),
+            catchability = pull_label("catchability")
+          ) |>
+            tidyr::pivot_longer(
+              cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+              names_to = "metric",
+              values_to = "value"
+            ),
+          error = function(e) {
+            warning("read_output_data(): skipping ", model_label, " simulation ",
+                    sim_id, ": ", conditionMessage(e), call. = FALSE)
+            NULL
+          }
+        )
+      })
+    }
+
+    rceattle_fixed_data <- read_rceattle_scenario("fixed_effects",
+                                                  "Rceattle_fixed_effects")
+    rceattle_random_data <- read_rceattle_scenario("random_effects",
+                                                   "Rceattle_random_effects")
+  }
+
   # Combine all data
-  dplyr::bind_rows(
+  out <- dplyr::bind_rows(
     om_data,
     asap_data,
     bam_data,
@@ -368,8 +468,32 @@ read_output_data <- function(
     wham_fixed_data,
     wham_random_data,
     fims_fixed_data,
-    fims_random_data
+    fims_random_data,
+    rceattle_fixed_data,
+    rceattle_random_data
   )
+
+  # A requested model that contributed no rows would otherwise vanish from every
+  # figure and table without comment -- the EM never ran, its output directory is
+  # empty, or its reader was skipped. Name it.
+  expected <- unlist(lapply(em_names, function(x) {
+    switch(x,
+      "SS"       = "SS3",
+      "WHAM"     = c("WHAM_fixed_effects", "WHAM_random_effects"),
+      "FIMS"     = c("FIMS_fixed_effects", "FIMS_random_effects"),
+      "Rceattle" = c("Rceattle_fixed_effects", "Rceattle_random_effects"),
+      x)
+  }))
+  absent <- setdiff(expected, unique(out[["model"]]))
+  if (length(absent) > 0) {
+    warning("read_output_data(): no rows found for requested model(s): ",
+            paste(absent, collapse = ", "),
+            ". They will be missing from every figure and table. Check that the ",
+            "estimation model ran and that its output files exist under ",
+            file.path(output_dir, "<model>", "s<sim>"), ".", call. = FALSE)
+  }
+
+  out
 }
 
 #' Calculate 95% confidence interval for median using binomial distribution
@@ -458,7 +582,7 @@ calc_centered_mare <- function(df, max_iter = max(df$simulation, na.rm = TRUE)) 
 #' @return ggplot object
 plot_convergence_analysis <- function(convergence_results, metric_label = "Catchability") {
   
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")
+  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")
   
   plot_data <- convergence_results |>
     dplyr::mutate(model = factor(model, levels = model_order))
@@ -469,7 +593,7 @@ plot_convergence_analysis <- function(convergence_results, metric_label = "Catch
     ggplot2::coord_cartesian(ylim = c(-0.05, 0.05)) +
     ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "darkgray", linewidth = 0.8) +
     ggplot2::scale_color_manual(values = model_colors, drop = FALSE) +
-    ggplot2::scale_shape_manual(values = c(15, 16, 17, 18, 19, 8, 4), drop = FALSE) +
+    ggplot2::scale_shape_manual(values = c(15, 16, 17, 18, 19, 8, 4, 3, 7), drop = FALSE) +
     ggplot2::labs(
       title = paste0("Centered MARE over Iterations (", metric_label, ")"),
       x = "Number of Iterations",
@@ -504,7 +628,7 @@ plot_metric <- function(summary_data,
   plot_data <- summary_data |> dplyr::filter(metric == metric_name)
   
   # Define model ordering
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")
+  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")
   
   # Separate OM
   if (include_om && !is.null(facet_by)) {
@@ -665,7 +789,7 @@ calculate_mre_summary <- function(re_data) {
       .groups = "drop"
     ) |>
     dplyr::mutate(
-      model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")),
+      model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")),
       mre = round(mre, 2),
       mre_lower = round(mre_lower, 2),
       mre_upper = round(mre_upper, 2),
@@ -700,7 +824,7 @@ calculate_mare_summary <- function(re_data) {
       .groups = "drop"
     ) |>
     dplyr::mutate(
-      model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")),
+      model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")),
       mare = round(mare, 2),
       mare_lower = round(mare_lower, 2),
       mare_upper = round(mare_upper, 2),
@@ -729,8 +853,9 @@ create_summed_metric_tables <- function(all_data,
   }
   
   # Define model ordering (excluding OM for RE calculation)
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", 
-                   "FIMS_fixed_effects", "FIMS_random_effects")
+  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects",
+                   "FIMS_fixed_effects", "FIMS_random_effects",
+                   "Rceattle_fixed_effects", "Rceattle_random_effects")
   
   summed_tables <- list()
   
@@ -822,9 +947,11 @@ summarize_summed_metric_tables <- function(summed_tables) {
     
     summary_list[[metric_name]] <- summary_data |>
       dplyr::mutate(
-        model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", 
-                                         "WHAM_random_effects", "FIMS_fixed_effects", 
-                                         "FIMS_random_effects")),
+        model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects",
+                                         "WHAM_random_effects", "FIMS_fixed_effects",
+                                         "FIMS_random_effects",
+                                         "Rceattle_fixed_effects",
+                                         "Rceattle_random_effects")),
         mean_re = round(mean_re, 2),
         median_re = round(median_re, 2),
         median_lower = round(median_lower, 2),
@@ -851,7 +978,7 @@ summarize_summed_metric_tables <- function(summed_tables) {
 plot_re_boxplot_by_year <- function(re_data, metric_filter = "spawning_biomass") {
   
   # Define model ordering
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")
+  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")
   
   plot_data <- re_data |> 
     dplyr::filter(metric %in% metric_filter) |>
@@ -899,7 +1026,7 @@ plot_re_boxplot_by_year <- function(re_data, metric_filter = "spawning_biomass")
 plot_re_violin <- function(re_data, metric_filter = "spawning_biomass") {
   
   # Define model ordering
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects")
+  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")
   
   plot_data <- re_data |> dplyr::filter(metric %in% metric_filter)
   
@@ -955,7 +1082,7 @@ plot_re_violin <- function(re_data, metric_filter = "spawning_biomass") {
 create_ssb_r_f_plots <- function(main_dir,
                                  output_dir = NULL,
                                  data,
-                                 em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS"),
+                                 em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS", "Rceattle"),
                                  sim_ids = NULL) {
   
   if (is.null(data) || nrow(data) == 0) {

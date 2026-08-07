@@ -41,6 +41,19 @@ install_required_packages <- function() {
       "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems",
       "NOAA-FIMS/FIMS",
       "timjmiller/wham",
+      # Rceattle is a TMB model, so installing it compiles C++ and needs a
+      # working toolchain. Branch pinned explicitly, as for the other GitHub
+      # sources, so the manuscript's results do not move with an upstream push.
+      "grantdadams/Rceattle@main",
+      # TMBhelper is only in Rceattle's Suggests, so pak will NOT pull it in --
+      # and Rceattle takes a different optimizer path when it is absent
+      # (R/0-tmb_helpers.R), which would make fits depend on what happens to be
+      # installed. Request it explicitly.
+      "kaskr/TMB_contrib_R/TMBhelper",
+      # NOTE: r4ss is not listed here, so read_output_data() cannot read the SS3
+      # output and SS3 is absent from the figures. It now warns rather than
+      # skipping quietly. Adding r4ss changes which simulations survive the
+      # shared outlier filter, so it is left as a separate decision.
       "httr",
       "parallel",
       "doParallel",

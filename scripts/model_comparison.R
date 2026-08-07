@@ -62,7 +62,7 @@ ASSAMC::run_om(input_list = sim_input)
 # Mapping specific config files to the respective ADMB models
 runtime <- system.time({
   ASSAMC::run_em(
-    em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS"),
+    em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS", "Rceattle"),
     input_list = sim_input,
     em_input_filenames = data.frame(
       ASAP = "C0",
@@ -104,7 +104,7 @@ message(paste("Success! Zipped File Drive ID is:", uploaded_file[["id"]]))
 # Load outputs from all simulations
 all_data <- read_output_data(
   main_dir = file.path(maindir, "C0"),
-  em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS"),
+  em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS", "Rceattle"),
   sim_ids = 1:sim_num
 )
 saveRDS(all_data, file.path(project_dir, "C0", "figure", "all_data.RDS"))
@@ -173,7 +173,7 @@ ggplot2::ggsave(
 # Convergence check
 # Filter simulations based on model maximum gradient and Hessian
 converged_sims <- check_convergence(
-  em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS"),
+  em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS", "Rceattle"),
   n_sim = sim_input[["om_sim_num"]],
   case_dir = "C0",
   gradient_threshold = 0.004
@@ -188,17 +188,32 @@ bad_sim_ids <- all_re |>
   unique() |>
   sort()
 
-# Final set: Successfully converged simulations minus the outliers 
+# Final set: Successfully converged simulations minus the outliers
 # Limit to first 100 iterations
 converged_sim_ids <- converged_sims |>
   setdiff(bad_sim_ids) |>
   head(100)
+
+# head(100) returns fewer than 100 without complaint, which would silently make
+# the manuscript's "100 simulations" untrue. Both filters above are shared across
+# every EM -- check_convergence() intersects over all models, and bad_sim_ids is
+# computed over all of all_re -- so one poorly-behaved model evicts simulations
+# for all of them. Say so rather than quietly shrinking the sample.
+if (length(converged_sim_ids) < 100) {
+  warning(
+    "Only ", length(converged_sim_ids), " simulations survived the convergence ",
+    "and outlier filters (wanted 100): ", length(converged_sims),
+    " converged across all models, ", length(bad_sim_ids),
+    " flagged as outliers (|RE| > 40%). Figures and tables will be based on ",
+    "fewer than 100 simulations.", call. = FALSE
+  )
+}
 
 # Generate final figures
 results <- create_ssb_r_f_plots(
   main_dir = file.path(maindir, "C0"),
   output_dir = file.path(maindir, "C0", "figure"),
   data = all_data,
-  em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS"),
+  em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS", "Rceattle"),
   sim_ids = converged_sim_ids
 )

@@ -1,5 +1,19 @@
-#' Check convergence for ASAP, BAM, SS, WHAM, and FIMS estimation models
-#' @param em_names Character vector of estimation model names (e.g., c("ASAP", "BAM", "SS", "WHAM", "FIMS"))
+#' Resolve the gradient threshold for one model
+#'
+#' `gradient_threshold` is either a single unnamed number applied to every model,
+#' or a vector named by model. Models absent from a named vector fall back to
+#' 0.01, matching the `threshold_df` default used for the filter itself.
+#' @param gradient_threshold Numeric, optionally named by model.
+#' @param model A single model name (character or factor).
+#' @return A single numeric threshold.
+.model_threshold <- function(gradient_threshold, model) {
+  if (is.null(names(gradient_threshold))) return(gradient_threshold[[1]])
+  thr <- gradient_threshold[as.character(model)]
+  if (is.na(thr)) 0.01 else unname(thr)
+}
+
+#' Check convergence for ASAP, BAM, SS, WHAM, FIMS, and Rceattle estimation models
+#' @param em_names Character vector of estimation model names (e.g., c("ASAP", "BAM", "SS", "WHAM", "FIMS", "Rceattle"))
 #' @param n_sim Integer, number of operating model simulations
 #' @param case_dir Character, path to case working directory
 #' @param gradient_threshold Numeric, threshold for gradient convergence (default = 0.01)
@@ -13,6 +27,7 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
   admb_models <- em_names[em_names %in% c("ASAP", "BAM", "SS")]
   wham_models <- em_names[em_names == "WHAM"]
   fims_models <- em_names[em_names == "FIMS"]
+  rceattle_models <- em_names[em_names == "Rceattle"]
   
   # Initialize empty results tibble to store convergence info for all models
   results <- tibble::tibble()
@@ -227,28 +242,125 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
     
     results <- dplyr::bind_rows(results, fims_results)
   }
-  
+
+  # Process Rceattle models
+  # Rceattle writes the same per-scenario RDS artifacts as FIMS, with an
+  # `rceattle` infix: max_gradient_rceattle_<scenario>.RDS and
+  # hessian_rceattle_<scenario>.RDS. Rceattle also fits a third scenario
+  # (random_effects_sigmaR_constant); like FIMS's, it is not used here.
+  # Note the hessian file is only written when a sdreport was produced, so a
+  # fit that errored or timed out leaves it absent -- which maps to NA and is
+  # then dropped by the positive_hessian == TRUE filter, i.e. non-converged.
+  if (length(rceattle_models) > 0) {
+    rceattle_results <- expand.grid(
+      sim = seq_len(n_sim),
+      model = rceattle_models,
+      stringsAsFactors = FALSE
+    ) |>
+      tibble::as_tibble() |>
+      dplyr::mutate(
+        sim_dir = file.path(case_dir, "output", model, paste0("s", sim)),
+        gradient_file_fixed = file.path(sim_dir, "max_gradient_rceattle_fixed_effects.RDS"),
+        gradient_file_random = file.path(sim_dir, "max_gradient_rceattle_random_effects.RDS"),
+        hessian_file_fixed = file.path(sim_dir, "hessian_rceattle_fixed_effects.RDS"),
+        hessian_file_random = file.path(sim_dir, "hessian_rceattle_random_effects.RDS"),
+        # Load Rceattle fixed effects maximum gradient
+        gradient_fixed = purrr::map_dbl(gradient_file_fixed, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA_real_)
+          } else {
+            NA_real_
+          }
+        }),
+        # Load Hessian for fixed effects models
+        positive_hessian_fixed = purrr::map_lgl(hessian_file_fixed, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA)
+          } else {
+            NA
+          }
+        }),
+        # Load Rceattle random effects maximum gradient
+        gradient_random = purrr::map_dbl(gradient_file_random, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA_real_)
+          } else {
+            NA_real_
+          }
+        }),
+        # Load Hessian for random effects models
+        positive_hessian_random = purrr::map_lgl(hessian_file_random, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA)
+          } else {
+            NA
+          }
+        })
+      ) |>
+      dplyr::select(
+        sim,
+        gradient_fixed, gradient_random,
+        positive_hessian_fixed, positive_hessian_random
+      ) |>
+      # Reshape to long format: one row per effect type per simulation
+      tidyr::pivot_longer(
+        cols = c(
+          gradient_fixed, gradient_random,
+          positive_hessian_fixed, positive_hessian_random
+        ),
+        names_to = c(".value", "effect_type"),
+        names_pattern = "(.+)_(fixed|random)"
+      ) |>
+      dplyr::mutate(
+        # Create descriptive model names for each effect type
+        model = dplyr::case_when(
+          effect_type == "fixed" ~ "Rceattle_fixed_effects",
+          effect_type == "random" ~ "Rceattle_random_effects",
+          TRUE ~ "Rceattle"
+        )
+      ) |>
+      dplyr::select(sim, model, positive_hessian, gradient)
+
+    results <- dplyr::bind_rows(results, rceattle_results)
+  }
+
   # Make a table of convergence rates for each estimation model
   convergence_rates <- results |>
     dplyr::mutate(
       model = factor(
         model, 
         levels = c(
-          "ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", 
-          "FIMS_fixed_effects", "FIMS_random_effects"
+          "ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects",
+          "FIMS_fixed_effects", "FIMS_random_effects",
+          "Rceattle_fixed_effects", "Rceattle_random_effects"
         )
       )
     ) |>
     dplyr::group_by(model) |>
     dplyr::summarize(
       total_simulations = dplyr::n(),
-      converged_simulations = sum(positive_hessian == TRUE & gradient <= ifelse(is.null(names(gradient_threshold)), gradient_threshold, gradient_threshold[model]), na.rm = TRUE),
+      # Index the named threshold vector by NAME. `model` is a factor here, so
+      # gradient_threshold[model] would index by integer level code and hand each
+      # model some other model's threshold -- making this reported table disagree
+      # with the filter actually applied below.
+      converged_simulations = sum(positive_hessian == TRUE & gradient <= .model_threshold(gradient_threshold, dplyr::first(model)), na.rm = TRUE),
       convergence_rate = converged_simulations / total_simulations * 100,
       .groups = "drop"
     ) |>
     dplyr::arrange(model)
   
-  # Save convergence rates to a CSV file for reporting
+  # Save convergence rates to a CSV file for reporting. The figure directory
+  # normally already exists, but not when convergence is checked on a case
+  # before any plots have been drawn.
+  dir.create(file.path(case_dir, "figure"), showWarnings = FALSE, recursive = TRUE)
   write.csv(convergence_rates, file.path(case_dir, "figure", "convergence_rates.csv"))
   
   # Handle model-specific gradient thresholds
@@ -278,7 +390,28 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
     dplyr::group_by(model) |> 
     dplyr::summarise(converged_sims = list(sim), .groups = "drop")
   
+  # A model with zero converged simulations produces NO row here, so the
+  # intersection below would skip it entirely and report a healthy sample rather
+  # than the empty one that is actually true. Re-introduce it as an explicit
+  # empty set, and say which model it was.
+  silent_models <- setdiff(unique(results[["model"]]),
+                           converged_by_model[["model"]])
+  if (length(silent_models) > 0) {
+    warning("check_convergence(): no simulation converged for model(s): ",
+            paste(silent_models, collapse = ", "),
+            ". The common set is therefore empty. Check that the estimation ",
+            "model ran and wrote its gradient/Hessian files.", call. = FALSE)
+    converged_by_model <- dplyr::bind_rows(
+      converged_by_model,
+      tibble::tibble(model = silent_models,
+                     converged_sims = replicate(length(silent_models),
+                                                integer(0), simplify = FALSE))
+    )
+  }
+
   # Find the intersection of converged simulations across ALL models
   # Only simulations that converged for every model will be in common_sim_ids
   common_sim_ids <- Reduce(intersect, converged_by_model[["converged_sims"]])
+  if (is.null(common_sim_ids)) common_sim_ids <- integer(0)
+  common_sim_ids
 }
