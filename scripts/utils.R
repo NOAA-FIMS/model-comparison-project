@@ -35,12 +35,13 @@ install_wine_on_linux <- function() {
 # Install R packages that are required for the project
 install_required_packages <- function() {
   # Install the required R packages
-  install.packages("pak")
+  if (!requireNamespace("pak", quietly = TRUE)) {
+    install.packages("pak")
+  }
   pak::pkg_install(
     c(
-      # Requires run_rceattle() on this branch. Until that PR merges, run_em()
-      # will skip "Rceattle" silently and its panels will be absent from every
-      # figure.
+      "readr",
+      "r4ss/r4ss@a5283fc6dbfe46c8d795d0b2995a0c1bdff1a615",
       "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems",
       "NOAA-FIMS/FIMS",
       "timjmiller/wham",
@@ -48,6 +49,7 @@ install_required_packages <- function() {
       # working toolchain. Pinned to a release tag rather than a branch: a
       # branch moves, and the manuscript's numbers must not move with it.
       # 4.9.1 is commit 7d873ca7.
+      # "grantdadams/Rceattle@5.64.0", # Tried to use the latest release, but failed with build_srr() settings
       "grantdadams/Rceattle@4.9.1",
       # TMBhelper is only in Rceattle's Suggests, so pak will NOT pull it in --
       # and Rceattle takes a different optimizer path when it is absent

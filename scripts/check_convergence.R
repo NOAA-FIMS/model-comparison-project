@@ -85,8 +85,9 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
       tibble::as_tibble() |> 
       dplyr::mutate(
         sim_dir = file.path(case_dir, "output", model, paste0("s", sim)),
-        fit_file_fixed = file.path(sim_dir, "fit_wham_fixed_effects.RDS"),
+        fit_file_fixed = file.path(sim_dir, "fit_wham_fixed_effects_logNAA.RDS"),
         fit_file_random = file.path(sim_dir, "fit_wham_random_effects.RDS"),
+        fit_file_random_sigmaR_constant = file.path(sim_dir, "fit_wham_random_effects_sigmaR_constant.RDS"),
         # Load WHAM fixed effects gradient and positive_hessian
         convergence_fixed = purrr::map_dbl(fit_file_fixed, ~{
           if (file.exists(.x)) {
@@ -130,22 +131,52 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
           } else {
             NA
           }
+        }),
+        # Load WHAM random effects sigma constant gradient and positive_hessian
+        convergence_random_sigmaR_constant = purrr::map_dbl(fit_file_random_sigmaR_constant, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              fit <- readRDS(.x)
+              max(abs(fit[["final_gradient"]]))
+            }, error = function(e) NA_real_)
+          } else {
+            NA_real_
+          }
+        }),
+        positive_hessian_random_sigmaR_constant = purrr::map_lgl(fit_file_random_sigmaR_constant, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              fit <- readRDS(.x)
+              # positive_hessian is TRUE if na_sdrep is FALSE
+              !fit[["na_sdrep"]]
+            }, error = function(e) NA)
+          } else {
+            NA
+          }
         })
       ) |>
-      dplyr::select(sim, convergence_fixed, convergence_random, positive_hessian_fixed, positive_hessian_random) |>
+      dplyr::select(
+        sim,
+        convergence_fixed, convergence_random, convergence_random_sigmaR_constant,
+        positive_hessian_fixed, positive_hessian_random, positive_hessian_random_sigmaR_constant
+      ) |>
       # Reshape to long format: one row per effect type per simulation
       # This allows tracking fixed and random effects convergence separately
       # Uses names_pattern to reshape both convergence and positive_hessian columns together
       tidyr::pivot_longer(
-        cols = c(convergence_fixed, convergence_random, positive_hessian_fixed, positive_hessian_random),
+        cols = c(
+          convergence_fixed, convergence_random, convergence_random_sigmaR_constant,
+          positive_hessian_fixed, positive_hessian_random, positive_hessian_random_sigmaR_constant
+        ),
         names_to = c(".value", "effect_type"),
-        names_pattern = "(.+)_(fixed|random)"
+        names_pattern = "^(.+)_(random_sigmaR_constant|random|fixed|)$"
       ) |>
       dplyr::mutate(
         # Create descriptive model names for each effect type
         model = dplyr::case_when(
-          effect_type == "fixed" ~ "WHAM_fixed_effects",
-          effect_type == "random" ~ "WHAM_random_effects",
+          effect_type == "fixed" ~ "WHAM_penalized_MLE",
+          effect_type == "random" ~ "WHAM_state_space_unknown_sigmaR",
+          effect_type == "random_sigmaR_constant" ~ "WHAM_state_space_known_sigmaR",
           TRUE ~ "WHAM"
         ),
         # Rename convergence column to gradient for consistency with other models
@@ -173,8 +204,10 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
         fit_file_random = file.path(sim_dir, "fit_fims_random_effects.RDS"),
         gradient_file_fixed = file.path(sim_dir, "max_gradient_fims_fixed_effects.RDS"),
         gradient_file_random = file.path(sim_dir, "max_gradient_fims_random_effects.RDS"),
+        gradient_file_random_sigmaR_constant = file.path(sim_dir, "max_gradient_fims_random_effects_sigmaR_constant.RDS"),
         hessian_file_fixed = file.path(sim_dir, "hessian_fims_fixed_effects.RDS"),
         hessian_file_random = file.path(sim_dir, "hessian_fims_random_effects.RDS"),
+        hessian_file_random_sigmaR_constant = file.path(sim_dir, "hessian_fims_random_effects_sigmaR_constant.RDS"),
         # Load FIMS fixed effects maximum gradient
         gradient_fixed = purrr::map_dbl(gradient_file_fixed, ~{
           if (file.exists(.x)) {
@@ -214,27 +247,48 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
           } else {
             NA
           }
+        }),
+        # Load FIMS random effects sigma constant maximum gradient
+        gradient_random_sigmaR_constant = purrr::map_dbl(gradient_file_random_sigmaR_constant, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA_real_)
+          } else {
+            NA_real_
+          }
+        }),
+        # Load Hessian for random effects sigma constant models
+        positive_hessian_random_sigmaR_constant = purrr::map_lgl(hessian_file_random_sigmaR_constant, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA)
+          } else {
+            NA
+          }
         })
       ) |>
       dplyr::select(
-        sim, 
-        gradient_fixed, gradient_random, 
-        positive_hessian_fixed, positive_hessian_random
+        sim,
+        gradient_fixed, gradient_random, gradient_random_sigmaR_constant,
+        positive_hessian_fixed, positive_hessian_random, positive_hessian_random_sigmaR_constant
       ) |>
       # Reshape to long format: one row per effect type per simulation
       tidyr::pivot_longer(
         cols = c(
-          gradient_fixed, gradient_random,
-          positive_hessian_fixed, positive_hessian_random
+          gradient_fixed, gradient_random, gradient_random_sigmaR_constant,
+          positive_hessian_fixed, positive_hessian_random, positive_hessian_random_sigmaR_constant
         ),
         names_to = c(".value", "effect_type"),
-        names_pattern = "(.+)_(fixed|random)"
+        names_pattern = "^(.+)_(random_sigmaR_constant|random|fixed|)$"
       ) |>
       dplyr::mutate(
         # Create descriptive model names for each effect type
         model = dplyr::case_when(
-          effect_type == "fixed" ~ "FIMS_fixed_effects",
-          effect_type == "random" ~ "FIMS_random_effects",
+          effect_type == "fixed" ~ "FIMS_penalized_MLE",
+          effect_type == "random" ~ "FIMS_state_space_unknown_sigmaR",
+          effect_type == "random_sigmaR_constant" ~ "FIMS_state_space_known_sigmaR",
           TRUE ~ "FIMS"
         )
       ) |>
@@ -247,7 +301,7 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
   # Rceattle writes the same per-scenario RDS artifacts as FIMS, with an
   # `rceattle` infix: max_gradient_rceattle_<scenario>.RDS and
   # hessian_rceattle_<scenario>.RDS. Rceattle also fits a third scenario
-  # (random_effects_sigmaR_constant); like FIMS's, it is not used here.
+  # (random_effects_sigmaR_constant).
   # Note the hessian file is only written when a sdreport was produced, so a
   # fit that errored or timed out leaves it absent -- which maps to NA and is
   # then dropped by the positive_hessian == TRUE filter, i.e. non-converged.
@@ -262,8 +316,10 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
         sim_dir = file.path(case_dir, "output", model, paste0("s", sim)),
         gradient_file_fixed = file.path(sim_dir, "max_gradient_rceattle_fixed_effects.RDS"),
         gradient_file_random = file.path(sim_dir, "max_gradient_rceattle_random_effects.RDS"),
+        gradient_file_random_sigmaR_constant = file.path(sim_dir, "max_gradient_rceattle_random_effects_sigmaR_constant.RDS"),
         hessian_file_fixed = file.path(sim_dir, "hessian_rceattle_fixed_effects.RDS"),
         hessian_file_random = file.path(sim_dir, "hessian_rceattle_random_effects.RDS"),
+        hessian_file_random_sigmaR_constant = file.path(sim_dir, "hessian_rceattle_random_effects_sigmaR_constant.RDS"),
         # Load Rceattle fixed effects maximum gradient
         gradient_fixed = purrr::map_dbl(gradient_file_fixed, ~{
           if (file.exists(.x)) {
@@ -303,27 +359,48 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
           } else {
             NA
           }
+        }),
+        # Load Rceattle random effects sigma constant maximum gradient
+        gradient_random_sigmaR_constant = purrr::map_dbl(gradient_file_random_sigmaR_constant, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA_real_)
+          } else {
+            NA_real_
+          }
+        }),
+        # Load Hessian for random effects sigma constant models
+        positive_hessian_random_sigmaR_constant = purrr::map_lgl(hessian_file_random_sigmaR_constant, ~{
+          if (file.exists(.x)) {
+            tryCatch({
+              readRDS(.x)
+            }, error = function(e) NA)
+          } else {
+            NA
+          }
         })
       ) |>
       dplyr::select(
         sim,
-        gradient_fixed, gradient_random,
-        positive_hessian_fixed, positive_hessian_random
+        gradient_fixed, gradient_random, gradient_random_sigmaR_constant,
+        positive_hessian_fixed, positive_hessian_random, positive_hessian_random_sigmaR_constant
       ) |>
       # Reshape to long format: one row per effect type per simulation
       tidyr::pivot_longer(
         cols = c(
-          gradient_fixed, gradient_random,
-          positive_hessian_fixed, positive_hessian_random
+          gradient_fixed, gradient_random, gradient_random_sigmaR_constant,
+          positive_hessian_fixed, positive_hessian_random, positive_hessian_random_sigmaR_constant
         ),
         names_to = c(".value", "effect_type"),
-        names_pattern = "(.+)_(fixed|random)"
+        names_pattern = "^(.+)_(random_sigmaR_constant|random|fixed|)$"
       ) |>
       dplyr::mutate(
         # Create descriptive model names for each effect type
         model = dplyr::case_when(
-          effect_type == "fixed" ~ "Rceattle_fixed_effects",
-          effect_type == "random" ~ "Rceattle_random_effects",
+          effect_type == "fixed" ~ "Rceattle_penalized_MLE",
+          effect_type == "random" ~ "Rceattle_state_space_unknown_sigmaR",
+          effect_type == "random_sigmaR_constant" ~ "Rceattle_state_space_known_sigmaR",
           TRUE ~ "Rceattle"
         )
       ) |>
@@ -338,9 +415,10 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
       model = factor(
         model, 
         levels = c(
-          "ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects",
-          "FIMS_fixed_effects", "FIMS_random_effects",
-          "Rceattle_fixed_effects", "Rceattle_random_effects"
+          "ASAP", "BAM", "SS3",
+          "FIMS_penalized_MLE", "FIMS_state_space_unknown_sigmaR", "FIMS_state_space_known_sigmaR",
+          "Rceattle_penalized_MLE", "Rceattle_state_space_unknown_sigmaR", "Rceattle_state_space_known_sigmaR",
+          "WHAM_penalized_MLE", "WHAM_state_space_unknown_sigmaR", "WHAM_state_space_known_sigmaR"
         )
       )
     ) |>
@@ -362,6 +440,8 @@ check_convergence <- function(em_names, n_sim, case_dir, gradient_threshold = 0.
   # before any plots have been drawn.
   dir.create(file.path(case_dir, "figure"), showWarnings = FALSE, recursive = TRUE)
   write.csv(convergence_rates, file.path(case_dir, "figure", "convergence_rates.csv"))
+  # Save full results to a CSV file for detailed inspection
+  write.csv(results, file.path(case_dir, "figure", "full_convergence_results.csv"))
   
   # Handle model-specific gradient thresholds
   if (length(gradient_threshold) == 1 && is.null(names(gradient_threshold))) {

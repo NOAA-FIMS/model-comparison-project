@@ -1,7 +1,18 @@
 # Plotting functions for spawning biomass, recruitment, fishing mortality, and 
 # abundance
-# Supports: ASAP, BAM, SS3, WHAM (fixed/random effects), FIMS (fixed/random
-# effects), Rceattle (fixed/random effects)
+# Supports: ASAP, BAM, SS3, and three scenarios each for FIMS, Rceattle, and WHAM.
+
+comparison_scenarios <- c(
+  fixed_effects = "penalized_MLE",
+  random_effects = "state_space_unknown_sigmaR",
+  random_effects_sigmaR_constant = "state_space_known_sigmaR"
+)
+comparison_model_order <- c(
+  "ASAP", "BAM", "SS3",
+  paste0("FIMS_", comparison_scenarios),
+  paste0("Rceattle_", comparison_scenarios),
+  paste0("WHAM_", comparison_scenarios)
+)
 
 # Model color scheme using Okabe-Ito colorblind-friendly palette
 # Reference: https://jfly.uni-koeln.de/color/
@@ -10,15 +21,18 @@ model_colors <- c(
   "ASAP" = "#009E73",         # Bluish green
   "BAM" = "#D55E00",          # Vermillion
   "SS3" = "#0072B2",           # Blue
-  "WHAM_fixed_effects" = "#CC79A7",   # Reddish purple
-  "WHAM_random_effects" = "#882255",  # Dark reddish purple
-  "FIMS_fixed_effects" = "#E69F00",   # Orange
-  "FIMS_random_effects" = "#CC7700",  # Dark orange
+  "WHAM_penalized_MLE" = "#CC79A7",   # Reddish purple
+  "WHAM_state_space_unknown_sigmaR" = "#882255",  # Dark reddish purple
+  "WHAM_state_space_known_sigmaR" = "#AA4499",
+  "FIMS_penalized_MLE" = "#E69F00",   # Orange
+  "FIMS_state_space_unknown_sigmaR" = "#CC7700",  # Dark orange
+  "FIMS_state_space_known_sigmaR" = "#AA5500",
   # Violet / indigo: the blue-violet family is the largest remaining gap in the
   # palette. Nearest neighbour of either is SS3 (#0072B2) at CIE Lab dE 57 and
   # 49, comfortably separable in a nine-series panel.
-  "Rceattle_fixed_effects" = "#785EF0",  # Violet
-  "Rceattle_random_effects" = "#332288"  # Indigo
+  "Rceattle_penalized_MLE" = "#785EF0",  # Violet
+  "Rceattle_state_space_unknown_sigmaR" = "#332288",  # Indigo
+  "Rceattle_state_space_known_sigmaR" = "#9999DD"
 )
 
 #' Read OM and EM outputs data in tidy format
@@ -27,6 +41,10 @@ model_colors <- c(
 #' @param em_names Estimation model names
 #' @param sim_ids Simulation IDs to load (e.g., converged simulations only). If NULL, loads all available.
 #' @return Tibble with columns: case, model, metric, year, simulation, value
+#' @details SEs use separate metrics ending in _se, on the same scale as the
+#'   estimates. Log-scale SEs are transformed using the first-order delta method.
+#'   Total-abundance SE uses the full age covariance when available (WHAM);
+#'   it is NA otherwise, since marginal age SEs cannot be added.
 read_output_data <- function(
     main_dir, 
     em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS", "Rceattle"),
@@ -35,6 +53,28 @@ read_output_data <- function(
   
   case_name <- basename(main_dir)
   output_dir <- file.path(main_dir, "output")
+  output_metrics <- c(
+    "spawning_biomass", "recruitment", "abundance", "fishing_mortality",
+    "catchability", "spawning_biomass_se", "recruitment_se", "abundance_se",
+    "fishing_mortality_se"
+  )
+
+  read_std <- function(path) {
+    if (!file.exists(path)) {
+      warning("read_output_data(): SE file missing: ", path, call. = FALSE)
+      return(NULL)
+    }
+    utils::read.table(path, header = FALSE, skip = 1, stringsAsFactors = FALSE)
+  }
+  std_se <- function(std, label, nyr, rows = seq_len(nyr)) {
+    if (is.null(std)) return(rep(NA_real_, nyr))
+    values <- std[["V4"]][std[["V2"]] == label]
+    if (length(values) < max(rows)) {
+      warning("read_output_data(): incomplete SEs for ", label,
+              "; unavailable years are NA.", call. = FALSE)
+    }
+    values[rows]
+  }
   
   # Get simulation IDs if not provided
   if (is.null(sim_ids)) {
@@ -53,9 +93,7 @@ read_output_data <- function(
   # em_names hold a subset (e.g. just "Rceattle") without an
   # "object not found" error; bind_rows() ignores NULL arguments.
   asap_data <- bam_data <- ss_data <- NULL
-  wham_fixed_data <- wham_random_data <- NULL
-  fims_fixed_data <- fims_random_data <- NULL
-  rceattle_fixed_data <- rceattle_random_data <- NULL
+  wham_data <- fims_data <- rceattle_data <- NULL
 
   # Read OM data
   om_data <- purrr::map_dfr(sim_ids, function(sim_id) {
@@ -71,10 +109,14 @@ read_output_data <- function(
       recruitment = env[["om_output"]][["N.age"]][, 1] / 1000,
       abundance = rowSums(env[["om_output"]][["N.age"]]) / 1000,
       fishing_mortality = apply(env[["om_output"]][["FAA"]], 1, max),
-      catchability = env[["om_output"]][["survey_q"]][["survey1"]]
+      catchability = env[["om_output"]][["survey_q"]][["survey1"]],
+      spawning_biomass_se = NA_real_,
+      recruitment_se = NA_real_,
+      abundance_se = NA_real_,
+      fishing_mortality_se = NA_real_
     ) |>
       tidyr::pivot_longer(
-        cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+        cols = dplyr::all_of(output_metrics),
         names_to = "metric",
         values_to = "value"
       )
@@ -87,6 +129,8 @@ read_output_data <- function(
       if (!file.exists(rdat_file)) return(NULL)
       
       asap_output <- dget(rdat_file)
+      nyr <- length(asap_output[["SSB"]])
+      asap_std <- read_std(file.path(dirname(rdat_file), "asap3.std"))
       
       tibble::tibble(
         case = case_name,
@@ -97,10 +141,14 @@ read_output_data <- function(
         recruitment = asap_output[["N.age"]][, 1],
         abundance = rowSums(asap_output[["N.age"]]),
         fishing_mortality = apply(asap_output[["fleet.FAA"]][["FAA.directed.fleet1"]], 1, max),
-        catchability = asap_output[["q.indices"]]/1000
+        catchability = asap_output[["q.indices"]]/1000,
+        spawning_biomass_se = std_se(asap_std, "SSB", nyr),
+        recruitment_se = std_se(asap_std, "recruits", nyr),
+        abundance_se = NA_real_,
+        fishing_mortality_se = std_se(asap_std, "Freport", nyr)
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+          cols = dplyr::all_of(output_metrics),
           names_to = "metric",
           values_to = "value"
         )
@@ -127,10 +175,14 @@ read_output_data <- function(
         recruitment = bam_output[["t.series"]][["recruits"]][1:nyr] / 1000,
         abundance = rowSums(bam_output[["N.age"]][1:nyr, ]) / 1000,
         fishing_mortality = bam_output[["t.series"]][["F.full"]][1:nyr],
-        catchability = bam_output[["parms"]][["q.survey1"]]
+        catchability = bam_output[["parms"]][["q.survey1"]],
+        spawning_biomass_se = NA_real_,
+        recruitment_se = NA_real_,
+        abundance_se = NA_real_,
+        fishing_mortality_se = NA_real_
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+          cols = dplyr::all_of(output_metrics),
           names_to = "metric",
           values_to = "value"
         )
@@ -152,6 +204,7 @@ read_output_data <- function(
       if (!dir.exists(ss_dir)) return(NULL)
       
       ss_output <- r4ss::SS_output(dir = ss_dir, ncols = 300, verbose = FALSE, printstats = FALSE)
+      ss_std <- read_std(file.path(ss_dir, "ss.std"))
       
       # Get year range from first OM file
       env <- new.env()
@@ -166,6 +219,10 @@ read_output_data <- function(
       
       # Sum abundance across ages (columns 5 onwards are age classes)
       abundance_ss <- rowSums(ss_natage[, 5:ncol(ss_natage)])
+      nyr <- length(year_range)
+      f_se <- if (is.null(ss_std)) rep(NA_real_, nyr) else {
+        ss_std[["V4"]][grepl("^F_rate\\[", ss_std[["V2"]])][seq_len(nyr)]
+      }
       
       tibble::tibble(
         case = case_name,
@@ -180,205 +237,147 @@ read_output_data <- function(
           tibble::rownames_to_column("parameter") |>
           dplyr::filter(parameter == "LnQ_base_SURVEY1(2)") |>
           dplyr::pull(Value) |>
-          exp() / 1000
+          exp() / 1000,
+        spawning_biomass_se = std_se(ss_std, "SSB_std", nyr, seq_len(nyr) + 2L),
+        recruitment_se = std_se(ss_std, "recr_std", nyr, seq_len(nyr) + 1L),
+        abundance_se = NA_real_,
+        fishing_mortality_se = f_se
       ) |>
         tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+          cols = dplyr::all_of(output_metrics),
           names_to = "metric",
           values_to = "value"
         )
     })
   }
   
-  # Read WHAM data (fixed effects)
+  # Read WHAM scenarios
   if ("WHAM" %in% em_names) {
-    wham_fixed_data <- purrr::map_dfr(sim_ids, function(sim_id) {
-      rds_file <- file.path(output_dir, "WHAM", paste0("s", sim_id), "fit_wham_fixed_effects.RDS")
-      if (!file.exists(rds_file)) return(NULL)
-      
-      fit_wham <- readRDS(rds_file)
-      
-      # Extract F from FAA (fishing mortality at age)
-      f_mort <- exp(fit_wham[["rep"]][["log_F_tot"]])
-      
-      # Extract total abundance (sum across ages)
-      abundance_wham <- apply(fit_wham[["rep"]][["NAA"]][1, 1, , ], 1, sum)
-      
-      tibble::tibble(
-        case = case_name,
-        model = "WHAM_fixed_effects",
-        simulation = sim_id,
-        year = seq_along(fit_wham[["rep"]][["SSB"]]),
-        spawning_biomass = fit_wham[["rep"]][["SSB"]],
-        recruitment = fit_wham[["rep"]][["NAA"]][1, 1, , 1],
-        abundance = abundance_wham,
-        fishing_mortality = f_mort,
-        catchability = fit_wham[["rep"]][["q"]] / 1000
-      ) |>
-        tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
-          names_to = "metric",
-          values_to = "value"
-        )
-    })
-    
-    # Read WHAM data (random effects)
-    wham_random_data <- purrr::map_dfr(sim_ids, function(sim_id) {
-      rds_file <- file.path(output_dir, "WHAM", paste0("s", sim_id), "fit_wham_random_effects.RDS")
-      if (!file.exists(rds_file)) return(NULL)
-      
-      fit_wham <- readRDS(rds_file)
-      
-      # Extract F from FAA (fishing mortality at age)
-      f_mort <- exp(fit_wham[["rep"]][["log_F_tot"]])
-      
-      # Extract total abundance (sum across ages)
-      abundance_wham <- apply(fit_wham[["rep"]][["NAA"]][1, 1, , ], 1, sum)
-      
-      tibble::tibble(
-        case = case_name,
-        model = "WHAM_random_effects",
-        simulation = sim_id,
-        year = seq_along(fit_wham[["rep"]][["SSB"]]),
-        spawning_biomass = fit_wham[["rep"]][["SSB"]],
-        recruitment = fit_wham[["rep"]][["NAA"]][1, 1, , 1],
-        abundance = abundance_wham,
-        fishing_mortality = f_mort, 
-        catchability = fit_wham[["rep"]][["q"]] / 1000
-      ) |>
-        tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
-          names_to = "metric",
-          values_to = "value"
-        )
+    wham_data <- purrr::map_dfr(names(comparison_scenarios), function(scenario) {
+      purrr::map_dfr(sim_ids, function(sim_id) {
+        file_scenario <- if (scenario == "fixed_effects") "fixed_effects_logNAA" else scenario
+        rds_file <- file.path(output_dir, "WHAM", paste0("s", sim_id),
+                              paste0("fit_wham_", file_scenario, ".RDS"))
+        if (!file.exists(rds_file)) return(NULL)
+        fit_wham <- readRDS(rds_file)
+        nyr <- length(fit_wham[["rep"]][["SSB"]])
+        naa <- matrix(fit_wham[["rep"]][["NAA"]][1, 1, , ], nrow = nyr)
+        sdrep <- fit_wham[["sdrep"]]
+        wham_std <- NULL
+        if (!is.null(sdrep)) {
+          if (!requireNamespace("TMB", quietly = TRUE)) {
+            stop("read_output_data(): TMB is required to read WHAM SEs.")
+          }
+          wham_std <- summary(sdrep, "report")
+        } else {
+          warning("read_output_data(): WHAM sdreport missing in ", rds_file,
+                  "; SEs are NA.", call. = FALSE)
+        }
+        natural_se <- function(parameter, rows = seq_len(nyr)) {
+          if (length(rows) == 0L) return(numeric(0))
+          if (is.null(wham_std)) return(rep(NA_real_, length(rows)))
+          x <- wham_std[rownames(wham_std) == parameter, , drop = FALSE]
+          if (nrow(x) < max(rows)) {
+            warning("read_output_data(): incomplete WHAM SEs for ", parameter,
+                    " in ", rds_file, call. = FALSE)
+          }
+          (exp(x[, "Estimate"]) * x[, "Std. Error"])[rows]
+        }
+        # log_NAA_rep and its covariance use the same year-by-age array order
+        # as NAA. Retain cross-age covariance when applying the delta method.
+        abundance_se <- rep(NA_real_, nyr)
+        naa_indices <- which(names(sdrep[["value"]]) == "log_NAA_rep")
+        if (length(naa_indices) == length(naa) && !is.null(sdrep[["cov"]])) {
+          indices <- matrix(naa_indices, nrow = nyr)
+          abundance_se <- vapply(seq_len(nyr), function(year) {
+            cov_log <- sdrep[["cov"]][indices[year, ], indices[year, ], drop = FALSE]
+            sqrt(as.numeric(t(naa[year, ]) %*% cov_log %*% naa[year, ]))
+          }, numeric(1))
+        }
+        tibble::tibble(
+          case = case_name,
+          model = paste0("WHAM_", comparison_scenarios[[scenario]]),
+          simulation = sim_id,
+          year = seq_len(nyr),
+          spawning_biomass = as.numeric(fit_wham[["rep"]][["SSB"]]),
+          recruitment = as.numeric(naa[, 1]),
+          abundance = rowSums(naa),
+          fishing_mortality = as.numeric(exp(fit_wham[["rep"]][["log_F_tot"]])),
+          catchability = as.numeric(fit_wham[["rep"]][["q"]]) / 1000,
+          spawning_biomass_se = natural_se("log_SSB"),
+          recruitment_se = natural_se("log_NAA_rep"),
+          abundance_se = abundance_se,
+          fishing_mortality_se = natural_se("log_F_tot")
+        ) |>
+          tidyr::pivot_longer(
+            cols = dplyr::all_of(output_metrics),
+            names_to = "metric",
+            values_to = "value"
+          )
+      })
     })
   }
   
-  # Read FIMS data (fixed effects)
+  # Read FIMS scenarios
   if ("FIMS" %in% em_names) {
-    fims_fixed_data <- purrr::map_dfr(sim_ids, function(sim_id) {
-      rds_file <- file.path(output_dir, "FIMS", paste0("s", sim_id), "fit_fims_fixed_effects.RDS")
-      if (!file.exists(rds_file)) return(NULL)
-      
-      fims_output <- readRDS(rds_file)
-      
-      # Get year range from first OM file
-      env <- new.env()
-      load(file.path(output_dir, "OM", paste0("OM", sim_ids[1], ".RData")), envir = env)
-      nyr <- env[["om_input"]][["nyr"]]
-      
-      # Extract spawning biomass
-      sb_data <- fims_output |>
-        dplyr::filter(label == "spawning_biomass", year_i %in% 1:nyr) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated)
-      
-      # Extract recruitment (first age)
-      recruit_data <- fims_output |>
-        dplyr::filter(label == "expected_recruitment", year_i %in% 1:nyr) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated) / 1000
-      
-      # Extract fishing mortality
-      f_data <- fims_output |>
-        dplyr::filter(label == "log_Fmort", year_i %in% 1:nyr, module_id == 1) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated) |>
-        exp()
-      
-      # Extract total abundance (numbers at age)
-      abundance_fims <- fims_output |>
-        dplyr::filter(label == "numbers_at_age", year_i %in% 1:nyr) |>
-        dplyr::group_by(year_i) |>
-        dplyr::summarize(total = sum(estimated), .groups = "drop") |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(total) / 1000
-      
-      # Extract catchability
-      catchability_fims <- fims_output |>
-        dplyr::filter(label == "log_q" & module_id == 2) |>
-        dplyr::pull(estimated) |>
-        exp()
-      
-      tibble::tibble(
-        case = case_name,
-        model = "FIMS_fixed_effects",
-        simulation = sim_id,
-        year = 1:nyr,
-        spawning_biomass = sb_data,
-        recruitment = recruit_data,
-        abundance = abundance_fims,
-        fishing_mortality = f_data,
-        catchability = catchability_fims
-      ) |>
-        tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
-          names_to = "metric",
-          values_to = "value"
-        )
-    })
-    
-    # Read FIMS data (random effects)
-    fims_random_data <- purrr::map_dfr(sim_ids, function(sim_id) {
-      rds_file <- file.path(output_dir, "FIMS", paste0("s", sim_id), "fit_fims_random_effects.RDS")
-      if (!file.exists(rds_file)) return(NULL)
-      
-      fims_output <- readRDS(rds_file)
-      
-      # Get year range from first OM file
-      env <- new.env()
-      load(file.path(output_dir, "OM", paste0("OM", sim_ids[1], ".RData")), envir = env)
-      nyr <- env[["om_input"]][["nyr"]]
-      
-      # Extract spawning biomass
-      sb_data <- fims_output |>
-        dplyr::filter(label == "spawning_biomass", year_i %in% 1:nyr) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated)
-      
-      # Extract recruitment (first age)
-      recruit_data <- fims_output |>
-        dplyr::filter(label == "expected_recruitment", year_i %in% 1:nyr) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated) / 1000
-      
-      # Extract fishing mortality
-      f_data <- fims_output |>
-        dplyr::filter(label == "log_Fmort", year_i %in% 1:nyr, module_id == 1) |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(estimated) |>
-        exp()
-      
-      # Extract total abundance (numbers at age)
-      abundance_fims <- fims_output |>
-        dplyr::filter(label == "numbers_at_age", year_i %in% 1:nyr) |>
-        dplyr::group_by(year_i) |>
-        dplyr::summarize(total = sum(estimated), .groups = "drop") |>
-        dplyr::arrange(year_i) |>
-        dplyr::pull(total) / 1000
-      
-      # Extract catchability
-      catchability_fims <- fims_output |>
-        dplyr::filter(label == "log_q" & module_id == 2) |>
-        dplyr::pull(estimated) |>
-        exp()
-      
-      tibble::tibble(
-        case = case_name,
-        model = "FIMS_random_effects",
-        simulation = sim_id,
-        year = 1:nyr,
-        spawning_biomass = sb_data,
-        recruitment = recruit_data,
-        abundance = abundance_fims,
-        fishing_mortality = f_data,
-        catchability = catchability_fims
-      ) |>
-        tidyr::pivot_longer(
-          cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
-          names_to = "metric",
-          values_to = "value"
-        )
+    fims_data <- purrr::map_dfr(names(comparison_scenarios), function(scenario) {
+      purrr::map_dfr(sim_ids, function(sim_id) {
+        rds_file <- file.path(output_dir, "FIMS", paste0("s", sim_id),
+                              paste0("fit_fims_", scenario, ".RDS"))
+        if (!file.exists(rds_file)) return(NULL)
+
+        fims_output <- readRDS(rds_file)
+
+        # Get year range from first OM file
+        env <- new.env()
+        load(file.path(output_dir, "OM", paste0("OM", sim_ids[1], ".RData")), envir = env)
+        nyr <- env[["om_input"]][["nyr"]]
+
+        sb_data <- fims_output |>
+          dplyr::filter(label == "spawning_biomass", year_i %in% 1:nyr) |>
+          dplyr::arrange(year_i)
+
+        recruit_data <- fims_output |>
+          dplyr::filter(label == "expected_recruitment", year_i %in% 1:nyr) |>
+          dplyr::arrange(year_i)
+
+        f_data <- fims_output |>
+          dplyr::filter(label == "log_Fmort", year_i %in% 1:nyr, module_id == 1) |>
+          dplyr::arrange(year_i)
+
+        abundance_fims <- fims_output |>
+          dplyr::filter(label == "numbers_at_age", year_i %in% 1:nyr) |>
+          dplyr::group_by(year_i) |>
+          dplyr::summarize(total = sum(estimated), .groups = "drop") |>
+          dplyr::arrange(year_i) |>
+          dplyr::pull(total) / 1000
+
+        catchability_fims <- fims_output |>
+          dplyr::filter(label == "log_q" & module_id == 2) |>
+          dplyr::pull(estimated) |>
+          exp()
+
+        tibble::tibble(
+          case = case_name,
+          model = paste0("FIMS_", comparison_scenarios[[scenario]]),
+          simulation = sim_id,
+          year = 1:nyr,
+          spawning_biomass = sb_data[["estimated"]],
+          recruitment = recruit_data[["estimated"]] / 1000,
+          abundance = abundance_fims,
+          fishing_mortality = exp(f_data[["estimated"]]),
+          catchability = catchability_fims,
+          spawning_biomass_se = sb_data[["uncertainty"]],
+          recruitment_se = recruit_data[["uncertainty"]] / 1000,
+          abundance_se = NA_real_,
+          fishing_mortality_se = exp(f_data[["estimated"]]) * f_data[["uncertainty"]]
+        ) |>
+          tidyr::pivot_longer(
+            cols = dplyr::all_of(output_metrics),
+            names_to = "metric",
+            values_to = "value"
+          )
+      })
     })
   }
 
@@ -391,9 +390,6 @@ read_output_data <- function(
   # rowSums(N.age) and apply(FAA, 1, max). Its catchability is analytical
   # (closed-form MLE) rather than a freely estimated log_q, but is on the same
   # scale as the OM's survey_q.
-  #
-  # Rceattle also fits a third scenario (random_effects_sigmaR_constant); like
-  # FIMS's, it is not read here.
   if ("Rceattle" %in% em_names) {
     read_rceattle_scenario <- function(scenario, model_label) {
       purrr::map_dfr(sim_ids, function(sim_id) {
@@ -415,11 +411,11 @@ read_output_data <- function(
         # Length-checked so a truncated, duplicated or missing label drops this
         # one replicate with a warning rather than aborting the whole read --
         # which at 500 replicates would throw away every other model's work too.
-        pull_label <- function(lab) {
+        pull_label <- function(lab, column = "estimate") {
           v <- rceattle_output |>
             dplyr::filter(label == lab, year %in% 1:nyr) |>
             dplyr::arrange(year) |>
-            dplyr::pull(estimate)
+            dplyr::pull(dplyr::all_of(column))
           if (length(v) != nyr) {
             stop("label '", lab, "' has ", length(v), " rows, expected ", nyr,
                  call. = FALSE)
@@ -437,10 +433,14 @@ read_output_data <- function(
             recruitment = pull_label("recruitment") / 1000,
             abundance = pull_label("abundance") / 1000,
             fishing_mortality = pull_label("F"),
-            catchability = pull_label("catchability")
+            catchability = pull_label("catchability"),
+            spawning_biomass_se = pull_label("SSB", "uncertainty"),
+            recruitment_se = pull_label("recruitment", "uncertainty") / 1000,
+            abundance_se = NA_real_,
+            fishing_mortality_se = NA_real_
           ) |>
             tidyr::pivot_longer(
-              cols = c(spawning_biomass, recruitment, abundance, fishing_mortality, catchability),
+              cols = dplyr::all_of(output_metrics),
               names_to = "metric",
               values_to = "value"
             ),
@@ -453,10 +453,10 @@ read_output_data <- function(
       })
     }
 
-    rceattle_fixed_data <- read_rceattle_scenario("fixed_effects",
-                                                  "Rceattle_fixed_effects")
-    rceattle_random_data <- read_rceattle_scenario("random_effects",
-                                                   "Rceattle_random_effects")
+    rceattle_data <- purrr::map_dfr(names(comparison_scenarios), function(scenario) {
+      read_rceattle_scenario(scenario,
+                            paste0("Rceattle_", comparison_scenarios[[scenario]]))
+    })
   }
 
   # Combine all data
@@ -465,12 +465,9 @@ read_output_data <- function(
     asap_data,
     bam_data,
     ss_data,
-    wham_fixed_data,
-    wham_random_data,
-    fims_fixed_data,
-    fims_random_data,
-    rceattle_fixed_data,
-    rceattle_random_data
+    wham_data,
+    fims_data,
+    rceattle_data
   )
 
   # A requested model that contributed no rows would otherwise vanish from every
@@ -479,9 +476,9 @@ read_output_data <- function(
   expected <- unlist(lapply(em_names, function(x) {
     switch(x,
       "SS"       = "SS3",
-      "WHAM"     = c("WHAM_fixed_effects", "WHAM_random_effects"),
-      "FIMS"     = c("FIMS_fixed_effects", "FIMS_random_effects"),
-      "Rceattle" = c("Rceattle_fixed_effects", "Rceattle_random_effects"),
+      "WHAM"     = paste0("WHAM_", comparison_scenarios),
+      "FIMS"     = paste0("FIMS_", comparison_scenarios),
+      "Rceattle" = paste0("Rceattle_", comparison_scenarios),
       x)
   }))
   absent <- setdiff(expected, unique(out[["model"]]))
@@ -493,7 +490,42 @@ read_output_data <- function(
             file.path(output_dir, "<model>", "s<sim>"), ".", call. = FALSE)
   }
 
-  out
+  out |>
+    dplyr::arrange(case, match(model, c("OM", comparison_model_order)),
+                   simulation, year, match(metric, output_metrics))
+}
+
+#' Summarize reported SEs across simulation-year estimates
+#'
+#' @param data Tidy output from read_output_data().
+#' @return Table of SE statistics by case, model, and metric. Missing SEs are
+#'   excluded from statistics, not replaced with zero. Entirely missing groups
+#'   remain in the table with NA statistics and recorded_ses = 0. SE statistics
+#'   are rounded to two decimal places.
+calculate_se_summary <- function(data) {
+  se_metrics <- paste0(c("spawning_biomass", "recruitment", "abundance",
+                         "fishing_mortality"), "_se")
+  data |>
+    dplyr::filter(model != "OM", metric %in% se_metrics) |>
+    dplyr::group_by(case, model, metric) |>
+    dplyr::summarize(
+      total_estimates = dplyr::n(),
+      recorded_ses = sum(!is.na(value)),
+      n_simulations = dplyr::n_distinct(simulation[!is.na(value)]),
+      mean_se = if (recorded_ses > 0L) mean(value, na.rm = TRUE) else NA_real_,
+      median_se = if (recorded_ses > 0L) stats::median(value, na.rm = TRUE) else NA_real_,
+      sd_se = stats::sd(value, na.rm = TRUE),
+      min_se = if (recorded_ses > 0L) min(value, na.rm = TRUE) else NA_real_,
+      max_se = if (recorded_ses > 0L) max(value, na.rm = TRUE) else NA_real_,
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(
+      model = factor(model, levels = comparison_model_order),
+      dplyr::across(
+        c(mean_se, median_se, sd_se, min_se, max_se), ~ round(.x, 2)
+      )
+    ) |>
+    dplyr::arrange(case, match(metric, se_metrics), model)
 }
 
 #' Calculate 95% confidence interval for median using binomial distribution
@@ -582,7 +614,7 @@ calc_centered_mare <- function(df, max_iter = max(df$simulation, na.rm = TRUE)) 
 #' @return ggplot object
 plot_convergence_analysis <- function(convergence_results, metric_label = "Catchability") {
   
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")
+  model_order <- comparison_model_order
   
   plot_data <- convergence_results |>
     dplyr::mutate(model = factor(model, levels = model_order))
@@ -593,7 +625,12 @@ plot_convergence_analysis <- function(convergence_results, metric_label = "Catch
     ggplot2::coord_cartesian(ylim = c(-0.05, 0.05)) +
     ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "darkgray", linewidth = 0.8) +
     ggplot2::scale_color_manual(values = model_colors, drop = FALSE) +
-    ggplot2::scale_shape_manual(values = c(15, 16, 17, 18, 19, 8, 4, 3, 7), drop = FALSE) +
+    ggplot2::scale_shape_manual(values = stats::setNames(
+      c(15, 16, 17, 18, 19, 8, 4, 3, 7, 0, 1, 2), model_order
+    ), drop = FALSE) +
+    ggplot2::scale_linetype_manual(values = stats::setNames(
+      rep(c("solid", "dashed", "dotted", "dotdash"), 3), model_order
+    ), drop = FALSE) +
     ggplot2::labs(
       title = paste0("Centered MARE over Iterations (", metric_label, ")"),
       x = "Number of Iterations",
@@ -628,7 +665,7 @@ plot_metric <- function(summary_data,
   plot_data <- summary_data |> dplyr::filter(metric == metric_name)
   
   # Define model ordering
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")
+  model_order <- comparison_model_order
   
   # Separate OM
   if (include_om && !is.null(facet_by)) {
@@ -732,6 +769,10 @@ calculate_relative_errors <- function(all_data) {
     return(NULL)
   }
   
+  # SEs are uncertainty estimates, not quantities with an OM truth.
+  all_data <- all_data |>
+    dplyr::filter(!grepl("_se$", metric))
+
   # Separate OM and EM data
   om_data <- all_data |>
     dplyr::filter(model == "OM") |>
@@ -789,7 +830,7 @@ calculate_mre_summary <- function(re_data) {
       .groups = "drop"
     ) |>
     dplyr::mutate(
-      model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")),
+      model = factor(model, levels = comparison_model_order),
       mre = round(mre, 2),
       mre_lower = round(mre_lower, 2),
       mre_upper = round(mre_upper, 2),
@@ -824,7 +865,7 @@ calculate_mare_summary <- function(re_data) {
       .groups = "drop"
     ) |>
     dplyr::mutate(
-      model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")),
+      model = factor(model, levels = comparison_model_order),
       mare = round(mare, 2),
       mare_lower = round(mare_lower, 2),
       mare_upper = round(mare_upper, 2),
@@ -853,9 +894,7 @@ create_summed_metric_tables <- function(all_data,
   }
   
   # Define model ordering (excluding OM for RE calculation)
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects",
-                   "FIMS_fixed_effects", "FIMS_random_effects",
-                   "Rceattle_fixed_effects", "Rceattle_random_effects")
+  model_order <- comparison_model_order
   
   summed_tables <- list()
   
@@ -947,11 +986,7 @@ summarize_summed_metric_tables <- function(summed_tables) {
     
     summary_list[[metric_name]] <- summary_data |>
       dplyr::mutate(
-        model = factor(model, levels = c("ASAP", "BAM", "SS3", "WHAM_fixed_effects",
-                                         "WHAM_random_effects", "FIMS_fixed_effects",
-                                         "FIMS_random_effects",
-                                         "Rceattle_fixed_effects",
-                                         "Rceattle_random_effects")),
+        model = factor(model, levels = comparison_model_order),
         mean_re = round(mean_re, 2),
         median_re = round(median_re, 2),
         median_lower = round(median_lower, 2),
@@ -978,7 +1013,7 @@ summarize_summed_metric_tables <- function(summed_tables) {
 plot_re_boxplot_by_year <- function(re_data, metric_filter = "spawning_biomass") {
   
   # Define model ordering
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")
+  model_order <- comparison_model_order
   
   plot_data <- re_data |> 
     dplyr::filter(metric %in% metric_filter) |>
@@ -1018,6 +1053,76 @@ plot_re_boxplot_by_year <- function(re_data, metric_filter = "spawning_biomass")
     )
 }
 
+#' Plot reported SE distributions by year
+#' @param data Tidy output from read_output_data().
+#' @param metric_filter An SE metric, including the _se suffix.
+#' @return A ggplot object. Unavailable SEs are omitted, not plotted as zero.
+plot_se_boxplot_by_year <- function(data, metric_filter = "spawning_biomass_se") {
+  plot_data <- data |>
+    dplyr::filter(model != "OM", metric == metric_filter) |>
+    dplyr::mutate(model = factor(model, levels = comparison_model_order))
+  se_layer <- if (any(!is.na(plot_data$value))) {
+    ggplot2::geom_boxplot(outlier.size = 0.5, alpha = 0.7, na.rm = TRUE)
+  } else {
+    ggplot2::geom_blank(ggplot2::aes(y = 0))
+  }
+  ggplot2::ggplot(plot_data, ggplot2::aes(x = model, y = value, fill = model)) +
+    se_layer +
+    ggplot2::facet_wrap(~year, ncol = 5) +
+    ggplot2::scale_fill_manual(values = model_colors) +
+    ggplot2::scale_x_discrete(drop = FALSE) +
+    ggplot2::labs(
+      x = "Model", y = "Standard Error",
+      title = paste("Standard Error Over Time:", metric_filter),
+      subtitle = if (all(is.na(plot_data$value))) "No SEs available" else NULL
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      legend.position = "none",
+      panel.grid.minor = ggplot2::element_blank(),
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1, size = 12)
+    )
+}
+
+#' Plot reported SE distributions for all four comparison metrics
+#' @param data Tidy output from read_output_data().
+#' @return A ggplot object with separate metric and case panels.
+plot_se_violin <- function(data) {
+  se_labels <- c(
+    spawning_biomass_se = "SE(Spawning Biomass)",
+    recruitment_se = "SE(Recruitment)",
+    abundance_se = "SE(Total Abundance)",
+    fishing_mortality_se = "SE(Fishing Mortality)"
+  )
+  plot_data <- data |>
+    dplyr::filter(model != "OM", metric %in% names(se_labels)) |>
+    dplyr::mutate(
+      model = factor(model, levels = comparison_model_order),
+      metric_label = factor(se_labels[metric], levels = unname(se_labels))
+    )
+  se_layer <- if (any(!is.na(plot_data$value))) {
+    ggplot2::geom_violin(width = 0.9, alpha = 0.7, na.rm = TRUE)
+  } else {
+    ggplot2::geom_blank(ggplot2::aes(y = 0))
+  }
+  ggplot2::ggplot(plot_data, ggplot2::aes(x = model, y = value, fill = model)) +
+    se_layer +
+    ggplot2::facet_grid(metric_label ~ case, scales = "free_y", drop = FALSE) +
+    ggplot2::scale_fill_manual(values = model_colors) +
+    ggplot2::scale_x_discrete(drop = FALSE) +
+    ggplot2::labs(
+      x = "Model", y = "Standard Error",
+      title = "Standard Error Distributions",
+      subtitle = if (all(is.na(plot_data$value))) "No SEs available" else NULL
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      legend.position = "none",
+      panel.grid.minor = ggplot2::element_blank(),
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1, size = 12)
+    )
+}
+
 #' Plot relative error distributions
 #'
 #' @param re_data Relative error data
@@ -1026,7 +1131,7 @@ plot_re_boxplot_by_year <- function(re_data, metric_filter = "spawning_biomass")
 plot_re_violin <- function(re_data, metric_filter = "spawning_biomass") {
   
   # Define model ordering
-  model_order <- c("ASAP", "BAM", "SS3", "WHAM_fixed_effects", "WHAM_random_effects", "FIMS_fixed_effects", "FIMS_random_effects", "Rceattle_fixed_effects", "Rceattle_random_effects")
+  model_order <- comparison_model_order
   
   plot_data <- re_data |> dplyr::filter(metric %in% metric_filter)
   
@@ -1076,9 +1181,11 @@ plot_re_violin <- function(re_data, metric_filter = "spawning_biomass") {
 #' @param output_dir Output directory for figures and tables
 #' @param em_names Estimation model names
 #' @param sim_ids Simulation IDs to load (e.g., converged simulations). If NULL, loads all available.
-#' @return List with data, summary, relative_errors, mre_summary, and plots
+#' @return List with data, summary, relative_errors, mre_summary, se_summary,
+#'   summed metric summaries, and plots.
 #' @details Calculates relative errors as (EM - OM) / OM * 100. Saves plots as PNG and 
-#'   median relative error summary as CSV if output_dir is specified.
+#'   median relative error summary as CSV if output_dir is specified. Also saves
+#'   standard_error_summary.csv and SE plots for all four comparison metrics.
 create_ssb_r_f_plots <- function(main_dir,
                                  output_dir = NULL,
                                  data,
@@ -1091,13 +1198,13 @@ create_ssb_r_f_plots <- function(main_dir,
   
   # Get simulation IDs if not provided
   if (is.null(sim_ids)) {
-    om_files <- list.files(file.path(output_dir, "OM"), pattern = "^OM[0-9]+\\.RData$", full.names = FALSE)
+    om_files <- list.files(file.path(main_dir, "output", "OM"), pattern = "^OM[0-9]+\\.RData$", full.names = FALSE)
     sim_ids <- as.integer(stringr::str_extract(om_files, "[0-9]+"))
     sim_ids <- sim_ids[!is.na(sim_ids)]
   }
   
   if (length(sim_ids) == 0) {
-    warning(paste0("No simulation IDs provided or found in: ", file.path(output_dir, "OM")))
+    warning(paste0("No simulation IDs provided or found in: ", file.path(main_dir, "output", "OM")))
     return(NULL)
   }
   
@@ -1105,6 +1212,7 @@ create_ssb_r_f_plots <- function(main_dir,
     dplyr::filter(simulation %in% sim_ids)
   
   summary_stats <- calc_summary_stats(all_data)
+  se_summary <- calculate_se_summary(all_data)
   
   # Calculate relative errors
   all_re <- calculate_relative_errors(all_data)
@@ -1117,6 +1225,20 @@ create_ssb_r_f_plots <- function(main_dir,
   summed_sum_summary <- summarize_summed_metric_tables(sum_summary)
   
   plots <- list()
+  if (nrow(se_summary) > 0L) {
+    se_plot_metrics <- c(
+      sb = "spawning_biomass_se", recruit = "recruitment_se",
+      abundance = "abundance_se", f = "fishing_mortality_se"
+    )
+    for (name in names(se_plot_metrics)) {
+      plots[[paste0("se_boxplot_", name)]] <-
+        plot_se_boxplot_by_year(all_data, se_plot_metrics[[name]])
+    }
+    plots[["se_distributions"]] <- plot_se_violin(all_data)
+  } else {
+    warning("create_ssb_r_f_plots(): no SE metrics found; skipping SE plots. ",
+            "Reload outputs with read_output_data() to include SEs.", call. = FALSE)
+  }
   
   # Combined plots: All EMs vs OM with subplots by model
   # Filter data to include OM for background but exclude from facets
@@ -1183,10 +1305,10 @@ create_ssb_r_f_plots <- function(main_dir,
       filename <- file.path(output_dir, paste0(name, ".png"))
       
       # Set dimensions based on plot type
-      if (stringr::str_detect(name, "^re_boxplot")) {
+      if (stringr::str_detect(name, "^(re|se)_boxplot")) {
         width <- 14
         height <- 12
-      } else if (stringr::str_detect(name, "^re_")) {
+      } else if (stringr::str_detect(name, "^(re|se)_")) {
         width <- 14
         height <- 12
       } else {
@@ -1203,6 +1325,8 @@ create_ssb_r_f_plots <- function(main_dir,
       )
     })
     
+    readr::write_csv(se_summary, file.path(output_dir, "standard_error_summary.csv"))
+
     # Save MRE summary table
     if (!is.null(mre_summary)) {
       mre_file <- file.path(output_dir, "median_relative_error_summary.csv")
@@ -1236,6 +1360,7 @@ create_ssb_r_f_plots <- function(main_dir,
     relative_errors = all_re,
     mre_summary = mre_summary,
     mare_summary = mare_summary,
+    se_summary = se_summary,
     sum_summary = sum_summary,
     summed_sum_summary = summed_sum_summary,
     plots = plots

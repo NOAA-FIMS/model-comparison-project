@@ -8,6 +8,7 @@
 source("scripts/utils.R")
 source("scripts/check_convergence.R")
 source("scripts/plot_ssb_r_f.R")
+source("scripts/check_runtime.R")
 
 # Use the sequence of shell commands to install Wine to run .exe on Ubuntu
 install_wine_on_linux()
@@ -16,7 +17,6 @@ install_required_packages()
 
 library(parallel)
 library(doParallel)
-library(FIMS)
 
 # Code to connect Google Cloud Workstation with Google Drive and then upload raw outputs there
 email <- "bai.li@noaa.gov"
@@ -50,7 +50,7 @@ sim_input <- ASSAMC::save_initial_input(
   maindir = maindir,
   om_sim_num = sim_num,
   keep_sim_num = sim_num,
-  figure_number = 100,
+  figure_number = sim_num,
   seed_num = 9924,
   case_name = case_name
 )
@@ -108,6 +108,7 @@ all_data <- read_output_data(
   sim_ids = 1:sim_num
 )
 saveRDS(all_data, file.path(project_dir, "C0", "figure", "all_data.RDS"))
+all_data <- readRDS(file.path(project_dir, "C0", "figure", "all_data.RDS"))
 
 # Calculate relative errors (RE) for all key quantities:
 # spawning biomass, recruitment, abundance, fishing_mortality, catchability
@@ -163,7 +164,7 @@ sb_sim_are <- sb_sum_data |>
 sb_convergence_results <- calc_centered_mare(sb_sim_are)
 sb_convergence_plot <- plot_convergence_analysis(sb_convergence_results, metric_label = "Total Spawning Biomass")
 ggplot2::ggsave(
-  filename =file.path(project_dir, "C0", "figure", "sb_convergence.png"),
+  filename = file.path(project_dir, "C0", "figure", "sb_convergence.png"),
   plot = sb_convergence_plot,
   width = 14,
   height = 12,
@@ -216,4 +217,11 @@ results <- create_ssb_r_f_plots(
   data = all_data,
   em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS", "Rceattle"),
   sim_ids = converged_sim_ids
+)
+
+# Check runtime of all models and generate summary metrics
+runtime_summary <- check_runtime(
+  em_names = c("ASAP", "BAM", "SS", "WHAM", "FIMS", "Rceattle"),
+  n_sim = sim_input[["om_sim_num"]],
+  case_dir = "C0"
 )
