@@ -387,8 +387,7 @@ read_output_data <- function(
   # comparison metrics directly, so there is no unit conversion beyond the
   # /1000 that recruitment and abundance take for every model. Rceattle
   # reports numbers-at-age totals and an apical F, matching the OM's
-  # rowSums(N.age) and apply(FAA, 1, max). Its catchability is analytical
-  # (closed-form MLE) rather than a freely estimated log_q, but is on the same
+  # rowSums(N.age) and apply(FAA, 1, max). Its catchability is on the same
   # scale as the OM's survey_q.
   if ("Rceattle" %in% em_names) {
     read_rceattle_scenario <- function(scenario, model_label) {
