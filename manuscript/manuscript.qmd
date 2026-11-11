@@ -126,17 +126,134 @@ Previous studies showed that the Age Structured Assessment Program (ASAP), Beauf
 {>>Eric: any relevant differences between older models and FIMS<<}
 
 - An age-structured operating model (OM) with grouper-like life history was used to simulate data with a 30-year duration (@LI2021149).
-- ASAP, BAM, SS3, WHAM, and FIMS were configured as {==estimation models==}{>>Eric: it'd be helpful to have tables of the various EMs, with their settings. I realize this'll be in Github too<<} (EMs). Configurations for WHAM and FIMS included the use of fixed versus random effects for recruitment deviations.
+
+Population abundance-at-age in year $y$ and age $a$ ($N_{a,y}$) is governed by exponential decay:
+$$N_{a+1, y+1} = N_{a,y} e^{-Z_{a,y}} \quad \text{for } 1 \le a < A-1$$
+$$N_{A, y+1} = N_{A-1, y} e^{-Z_{A-1, y}} + N_{A, y} e^{-Z_{A, y}}$$
+where $Z_{a,y} = M_a + F_{a,y}$ represents total instantaneous mortality, with age-invariant natural mortality $M = 0.20\text{ year}^{-1}$ across all years and age classes [@LI2021149]. Annual fishing mortality was modeled as separable into age-specific fishery selectivity ($S_{F,a}$) and fully selected annual fishing mortality ($F_y$): $F_{a,y} = S_{F,a} F_y$ [@LI2021149]. The trajectory of $F_y$ increased linearly over the 30-year time horizon from an initial rate of $F_1 = 0.01\text{ year}^{-1}$ to a terminal rate of $F_{30} = 0.40\text{ year}^{-1}$ [@LI2021149]. 
+
+Recruitment ($R_y$, abundance at age 1) was governed by a standard Beverton–Holt spawner–recruit relationship parameterized by unfished equilibrium recruitment ($R_0 = 1.0 \times 10^6$ fish) and steepness ($h = 0.75$), with annual lognormal recruitment deviations:
+$$R_y = \frac{0.8 R_0 h SSB_{y-1}}{0.2 \phi_0 R_0 (1 - h) + (h - 0.2) SSB_{y-1}} e^{\varepsilon_{R,y} - \frac{\sigma_R^2}{2}}$$
+where $\phi_0$ is the unfished spawning biomass per recruit, $SSB_y$ is the female spawning stock biomass at the time of spawning, and $\varepsilon_{R,y} \sim \mathcal{N}(0, \sigma_R^2)$ with recruitment variability $\sigma_R = 0.20$ [@LI2021149].
+
+Data generated from the OM included annual fishery landings (in metric tons), a fishery-independent survey abundance index, and age-composition proportions for both the fishery and survey [@LI2021149]. Observation error for fishery landings and survey indices was lognormally distributed with coefficients of variation $CV_L = 0.05$ and $CV_I = 0.20$, respectively [@LI2021149]. Age composition data were simulated with multinomial observation error using an effective sample size of 200 samples per year for both fleets [@LI2021149]. The full suite of operating model biological, fishery, and observation parameters is summarized in @tbl-om-parameters [@LI2021149].
+
+| Parameter / Variable | Symbol | Value / Formulation | Estimated in EM |
+| :--- | :--- | :--- | :--- |
+| **Model Dimensions** | | | |
+| Number of modeled years | $Y$ | 30 years ($y \in \{1, \dots, 30\}$) | — |
+| Number of age classes | $A$ | Ages 1 to 12+ (plus group at 12) | — |
+| **Growth & Life History** | | | |
+| Asymptotic length | $L_\infty$ | 800 mm | Fixed |
+| Brody growth coefficient | $K$ | 0.18 $\text{year}^{-1}$ | Fixed |
+| Theoretical age at zero length | $t_0$ | -1.36 years | Fixed |
+| Length–weight scaling | $\theta_1$ | $2.50 \times 10^{-8}\text{ mt}\cdot\text{mm}^{-3}$ | Fixed |
+| Length–weight power | $\theta_2$ | 3.0 | Fixed |
+| Natural mortality rate | $M$ | 0.20 $\text{year}^{-1}$ (constant across ages and years) | Fixed |
+| Sex ratio | $r$ | 0.50 (proportion female at all ages) | Fixed |
+| Age at 50% maturity | $a_{50,\text{mat}}$ | 2.25 years | Fixed |
+| Slope of maturity ogive | $\beta_{\text{mat}}$ | 3.0 | Fixed |
+| **Stock & Recruitment** | | | |
+| Unfished recruitment | $R_0$ | $1.0 \times 10^6$ fish ($1.0 \times 10^3$ in thousands) | Estimated |
+| Steepness | $h$ | 0.75 | Fixed |
+| Recruitment deviation standard deviation | $\sigma_R$ | 0.20 (log space) | Setting-dependent |
+| **Fishery & Survey** | | | |
+| Fully selected fishing mortality trajectory | $F_y$ | Linear increase: $F_1 = 0.01$ to $F_{30} = 0.40\text{ year}^{-1}$ | Estimated ($F_y$ or apical $F$) |
+| Fishery selectivity inflection ($a_{50}$) | $a_{50,F}$ | 2.0 years (logistic) | Estimated |
+| Fishery selectivity slope | $\beta_F$ | 1.0 | Estimated |
+| Survey selectivity inflection ($a_{50}$) | $a_{50,I}$ | 1.5 years (logistic) | Estimated |
+| Survey selectivity slope | $\beta_I$ | 2.0 | Estimated |
+| Survey catchability coefficient | $q$ | $3.46 \times 10^{-7}$ (survey in numbers) | Estimated |
+| **Observation Uncertainty** | | | |
+| Fishery landings error | $CV_L$ | 0.05 (lognormal, mt) | Fixed |
+| Survey index error | $CV_I$ | 0.20 (lognormal, numbers) | Fixed |
+| Fleet age composition sample size | $N_{L}$ | 200 fish $\text{year}^{-1}$ (multinomial) | Fixed |
+| Survey age composition sample size | $N_{I}$ | 200 fish $\text{year}^{-1}$ (multinomial) | Fixed |
+
+: Operating model (OM) life history, population dynamics, fishery, and observation error parameters [@LI2021149; @Siegfried20161703]. {#tbl-om-parameters}
+
+## Estimation models and configurations
+
+- ASAP, BAM, SS3, FIMS, Rceattle, and WHAM were configured as {==estimation models==}{>>Eric: it'd be helpful to have tables of the various EMs, with their settings. I realize this'll be in Github too<<} (EMs). They represent both established operational software and next-generation frameworks [@LI2021149]:
+  - **Age Structured Assessment Program (ASAP, version 3.0.16)**: An ADMB-based statistical catch-at-age model widely applied in the Northeast U.S. [@Legault1998; @LI2021149].
+  - **Beaufort Assessment Model (BAM)**: An ADMB-based statistical catch-at-age framework developed by the Southeast Fisheries Science Center [@Williams2015; @LI2021149].
+  - **Stock Synthesis (SS3, version 3.30.15)**: A flexible, generalized age- and length-structured assessment framework implemented in ADMB and used globally [@METHOT201386; @LI2021149].
+  - **Fisheries Integrated Modeling System (FIMS)**: NOAA's next-generation modular framework implemented in C++ and TMB [3, 6, 23].
+  - **Rceattle**: A TMB age-structured framework developed for single-species and multi-species bioenergetic stock assessments in Alaska [@ADAMS2022106303].
+  - **Woods Hole Assessment Model (WHAM)**: A state-space age-structured stock assessment framework implemented in TMB that incorporates environmental linkages and random-effects structures [@STOCK2021105967].
+
+- All models were configured with equivalent population and fishery structures: ages 1–12+ with a plus group at age 12, a single fishing fleet with logistic selectivity, a single survey with logistic selectivity, annual lognormal observation likelihoods for landings ($CV = 0.05$) and survey index ($CV = 0.20$), and annual multinomial likelihoods for age composition data ($N = 200$) [@LI2021149, 8, 43, 46, 67, 92]. Survey catchability $q$ was estimated as a free parameter across all models [8, 33-37].
+
+| Dimension / Setting | ASAP | BAM | SS3 | FIMS | Rceattle | WHAM |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Software Platform** | ADMB | ADMB | ADMB | TMB | TMB | TMB |
+| **Initial Age Structure ($N_1$)** | Equilibrium offset with initial $F_1$ [20] | Equilibrium offset with initial $F_1$ [20] | Equilibrium offset with initial $F_1$ [20] | Free parameters (`log_init_naa`) [11, 24] | Free parameters (`initMode = 0`) [11, 17] | Free parameters (`N1_model = 0`) [11, 17] |
+| **Stock-Recruit Formulation** | Beverton–Holt ($R_0, h$) [8, 40] | Beverton–Holt ($R_0, h$) [8, 40] | Beverton–Holt ($R_0, h$) [8, 40] | Beverton–Holt ($R_0, h$) [12, 24] | Beverton–Holt ($\alpha, \beta$; $\alpha$ fixed from $h$) [11, 12] | Beverton–Holt ($\alpha, \beta$; $\alpha$ fixed from $h$) [11, 14] |
+| **Fishing Mortality ($F$)** | Apical $F$ with annual devs | Apical $F$ with annual devs | Continuous apical hybrid $F$ | Annual $\log F_{\text{mort}}$ [27, 36] | Annual $\log F$ [42, 43] | Annual $\log F_{\text{tot}}$ [14, 44] |
+| **Survey Catchability ($q$)** | Free parameter ($\log q$) [8, 35] | Free parameter ($\log q$) [8, 44] | Free parameter ($\log q$) [8, 44] | Free parameter ($\log q$) [27, 36] | Free parameter (closed-form MLE) [33, 37, 43] | Free parameter ($\log q$) [14, 44] |
+| **Recruitment: PML** | Quadratic penalty ($\sigma_R = 0.20$) [10] | Quadratic penalty ($\sigma_R = 0.20$) [45] | Quadratic penalty ($\sigma_R = 0.20$) [13] | Penalized fixed effects (`log_sd` fixed) [31] | Penalized fixed effects (`random_rec = FALSE`) [11, 12] | Penalized fixed effects (`log_NAA` removed from RE) [16] |
+| **Recruitment: State-Space (est. $\sigma_R$)** | Not supported | Not supported | Not supported | Random effects (`log_sd` estimated) [24] | Random effects (`R_log_sd` estimated) [11, 12] | Random effects (`log_NAA_sigma` estimated) [13, 14] |
+| **Recruitment: State-Space (known $\sigma_R$)**| Not supported | Not supported | Not supported | Random effects (`log_sd` mapped constant) [30] | Random effects (`R_log_sd` mapped to `NA`) [11, 12] | Random effects (`log_NAA_sigma` mapped to `NA`) [15] |
+
+: Structural characteristics and benchmark parameter configurations across the six evaluated estimation models (EMs) [6, 8, 10-16, 20, 24, 38, 40]. {#tbl-em-configurations}
+
+## Recruitment Modeling and Random-Effects Scenarios
+
+Recruitment deviations in statistical catch-at-age models can be treated as penalised fixed effects or as continuous random variables [@LI2021149; @STOCK2021105967, 45, 165]. To rigorously test how recruitment configuration influences estimation performance, the three modern TMB frameworks (FIMS, Rceattle, and WHAM) were each evaluated across three distinct recruitment scenarios [11, 17, 46, 47]:
+
+  - **Penalized Maximum Likelihood (PML) Scenario (`penalized_MLE` / `fixed_effects`)**:
+   Recruitment deviations ($\varepsilon_{R,y}$) are estimated as fixed-effect parameters subject to a Gaussian log-likelihood penalty:
+   $$\mathcal{L}_{\text{pen}}(\varepsilon_R) = \frac{1}{2 \sigma_R^2} \sum_{y=2}^Y \varepsilon_{R,y}^2$$
+   The standard deviation of recruitment deviations ($\sigma_R$) was fixed at the true operating model value ($\sigma_R = 0.20$) [10, 11, 13, 31, 45]. This matches the formulation used in classical ADMB models (ASAP, BAM, SS3) [10, 11, 13, 45]. In FIMS, this was configured by setting the recruitment `log_devs` parameter to `estimation_type = "fixed_effects"` with `log_sd` held constant [31]. In Rceattle, `random_rec = FALSE` was set in `Rceattle::fit_mod`, which maps off `R_log_sd` [11, 12]. In WHAM, `log_NAA` was stripped from the internal random-effects vector (`input_wham[["random"]]`) [16].
+
+  - **State-Space with Unknown Recruitment Standard Deviation (`state_space_unknown_sigmaR`)**:
+   Recruitment deviations are treated as unobserved latent state variables (random effects) integrated out of the joint likelihood via the Laplace approximation in TMB [11, 14, 24-26]. The variance parameter $\sigma_R$ (or $\log \sigma_R$) is simultaneously estimated as a fixed-effect hyperparameter [11, 13, 14, 24]. In FIMS, this corresponds to default random effects estimation where `log_sd` is estimated freely [24, 28]. In Rceattle, `random_rec = TRUE` was activated with `R_log_sd` estimated freely [11, 12]. In WHAM, `NAA_re = list(sigma = "rec")` was specified with `log_NAA_sigma` estimated [13, 14].
+
+  - **State-Space with Known Recruitment Standard Deviation (`state_space_known_sigmaR`)**:
+   Recruitment deviations remain random effects integrated via the Laplace approximation, but the variance hyperparameter $\sigma_R$ is fixed at the operating model's true value ($\sigma_R = 0.20$) [11, 12, 15, 30]. In FIMS, `log_sd` was set to `estimation_type = "constant"` [30]. In Rceattle, the parameter mapping vector was modified such that `mapFactor$R_log_sd <- factor(rep(NA, ...))` [11, 12]. In WHAM, `input_wham[["map"]][["log_NAA_sigma"]]` was mapped to `factor(NA)` [15].
+
 - A total of 500 simulation replicates were initially generated to ensure sufficient sample size for convergence analysis. The final analysis was performed on a subset of 100 simulations that successfully converged across all models.
+
+  - Convergence was evaluated using two criteria:
+    - The optimization algorithm terminated with a maximum absolute gradient of the log-likelihood (or marginal log-likelihood) less than or equal to a strict threshold: $\max |\nabla \ell| \le 0.004$.
+    - The Hessian matrix at the final solution was verified to be strictly positive-definite, confirming that the optimizer located a local minimum and standard errors were calculable.
+  
+  - Across the 500 simulations, the convergence rate ($CR_m$) for model $m$ was calculated as:
+    $$CR_m = \frac{N_{\text{converged}, m}}{N_{\text{total}, m}} \times 100$$
+
+    To guarantee direct, paired comparisons across all model configurations, we identified the common intersection of simulation replicates that converged across all estimation models. In addition, simulations exhibiting catastrophic estimation failures across any EM (defined as absolute relative error $|RE| > 40\%$) were filtered out as numerical outliers [55]. The first 100 fully converged, non-outlier simulations common to all models were selected for the final comparative evaluation.
+
 - Model performance metrics included:
   - Median relative error (MRE) and median absolute relative error (MARE) for key quantities such as spawning biomass ($SB$), recruitment ($R$), and fishing mortality ($F$). 
     - Relative error (RE) was calculated as $\frac{\hat{\theta}_i}{\theta_i} - 1$, where $\theta_i$ is the true value for simulated dataset $i$ and $\hat{\theta}_i$ is the value estimated from fitting the model to the simulated data. 
     - 95% confidence intervals of the MRE were calculated using the binomial distribution to estimate bias of each EM for a given OM (@THOMPSON1936122).
     - To summarize the bias across simulations and years for each model, we calculated the median RE across years for each simulation and then took the mean of these medians across simulations (@STOCK2021105967).
     - MARE across all years and simulations was calculated to quantify the overall accuracy, providing a measure of the magnitude of estimation errors.
-  - Convergence rate ($CR$) for each estimation model ($m$) was calculated as $CR_m = \frac{N_{converged, m}}{N_{total, m}}$, where $N_{converged}$ represents simulations meeting both the gradient and Hessian criteria.  
+  - The uncertainty in estimates was assessed using the standard deviation of the REs across simulations for each year and EM, providing insight into the variability of model performance over time.
+  - The run time for each estimation model was recorded to evaluate computational efficiency and compare the relative speed of different EMs across simulation replicates. Separating parameter optimization from Hessian calculation and uncertainty reporting (`sdreport`) allows for a more detailed assessment of computational efficiency.
 
 # Results
+
+- Across the 500 initial operating model (OM) simulations, model convergence rates ($CR$) reflected differences in software framework implementations and the treatment of recruitment deviations (@tbl-convergence-rates). TMB models generally exhibited higher values than ADMB models under the specified convergence criteria. FIMS, Rceattle, and WHAM showed particularly strong convergence when configured with random effects. However, these results are based on a one-size-fits-all criterion and may change if model-specific gradient thresholds are applied.
+
+  - Stock Synthesis (SS3) and all three configurations of FIMS (`penalized_MLE`, `state_space_unknown_sigmaR`, and `state_space_known_sigmaR`) achieved a 100% convergence rate (500/500 replicates), satisfying both the gradient threshold ($\max |\nabla \ell| \le 0.004$) and the positive-definite Hessian criterion. BAM converged in 498 of 500 replicates (99.6%), and ASAP converged in 480 replicates (96.0%). 
+
+  - For the other TMB-based platforms, convergence characteristics varied by recruitment formulation:
+    - In WHAM, both state-space random-effects configurations converged in 100% of replicates (500/500), while the penalized fixed-effects configuration (`WHAM_penalized_MLE`) converged in 73.0% of replicates.
+    - In Rceattle, state-space configurations achieved convergence rates of 96.2% (unknown $\sigma_R$) and 95.2% (known $\sigma_R$), while the penalized maximum likelihood configuration converged in 87.8% of replicates.
+
+```{r}
+#| label: tbl-convergence-rates
+#| tbl-cap: "Convergence success for 500 simulations across seven estimation model (EM) configurations. Convergence was defined as a positive-definite Hessian matrix and a maximum gradient component threshod."
+#| tbl-alt: "Table showing convergence rates for ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects). Columns include total simulations, converged simulations, and the convergence rate."
+#| echo: false
+
+# Read the convergence data
+convergence_rates <- read.csv("../C0/figure/convergence_rates.csv")
+
+# Display the data as a table
+knitr::kable(convergence_rates, format = "pipe")
+```
 
 {>>Eric: FIMS seems to do well with the central tendency, but the variance (sd_mre) is often among the highest, might be good to devote a paragraph to this in the discussion, or try to do a group brainstorm to think more about why this is?<<}
 
@@ -213,19 +330,66 @@ knitr::kable(
 )
 ```
 
-- Convergence rates varied across EMs, with TMB models generally exhibiting higher values than ADMB models under the specified convergence criteria (@tbl-convergence-rates). Both FIMS and WHAM showed particularly strong convergence when configured with random effects. However, these results are based on a one-size-fits-all criterion and may change if model-specific gradient thresholds are applied.
+- To verify that model frameworks produced mathematically equivalent parameter variance-covariance structures, standard errors for derived quantities were compared across models (@tbl-se-summary).
+  - For spawning biomass, the mean estimated standard error was ~171 mt across all reporting models: FIMS estimated standard errors of 170.4 mt (PML) and 170.7–170.8 mt (state-space), which matched SS3 (171.6 mt), ASAP (171.8 mt), Rceattle (171.8–172.4 mt), and WHAM (172.0–172.4 mt). Estimated standard errors for annual recruitment were likewise identical across all frameworks, averaging 54.0–55.0 thousand fish (mean: 60.0–61.3 thousand fish; standard deviation: 26.9–28.4 thousand fish). BAM does not report analytical standard errors for derived time series in its standard output routines and Rceattle does not report standard errors for fishing mortality.
 
 ```{r}
-#| label: tbl-convergence-rates
-#| tbl-cap: "Convergence success for 500 simulations across seven estimation model (EM) configurations. Convergence was defined as a positive-definite Hessian matrix and a maximum gradient component threshod."
-#| tbl-alt: "Table showing convergence rates for ASAP, BAM, SS3, WHAM (fixed and random effects), and FIMS (fixed and random effects). Columns include total simulations, converged simulations, and the convergence rate."
+#| label: tbl-se-summary
+#| tbl-cap: "Estimated standard errors for spawning biomass (\\(SB\\), mt) and recruitment (\\(R\\), thousands of fish) across 100 converged simulation replicates (\\(n = 3,000\\) estimates per metric)."
+#| tbl-alt: "Table comparing mean, median, and range of standard error estimates across models."
 #| echo: false
+#| message: false
+#| warning: false
 
-# Read the convergence data
-convergence_rates <- read.csv("../C0/figure/convergence_rates.csv")
+se_summary <- read.csv("../C0/figure/standard_error_summary.csv")
+knitr::kable(
+  se_summary,
+  format = "pipe"
+)
+```
 
-# Display the data as a table
-knitr::kable(convergence_rates, format = "pipe")
+- Runtime comparisons across the 500 simulations revealed marked differences in computational efficiency between software architectures and recruitment configurations (@tbl-runtime-optimization, @tbl-runtime-uncertainty).
+  - In the penalized maximum likelihood configuration, TMB-based models were substantially faster than legacy ADMB programs (@tbl-runtime-optimization):
+  - FIMS_penalized_MLE was the fastest model overall, optimizing in a median of 0.19 seconds (mean = 0.24 s, range: 0.10–0.64 s).
+  - WHAM_penalized_MLE optimized in a median of 0.60 seconds (mean = 0.58 s).
+  - Among ADMB models, ASAP required a median of 0.81 seconds, BAM required 2.16 seconds, and SS3 required 4.76 seconds.
+  - In state-space configurations, integrating random-effects recruitment deviations increased optimization time. Rceattle optimized in a median of 1.49–1.56 seconds. FIMS state-space models optimized in a median of 11.83–12.35 seconds (mean = 12.31–12.66 s), outperforming WHAM state-space models, which required a median of 16.20–17.40 seconds (mean = 17.51–19.13 s).
+
+```{r}
+#| label: tbl-runtime-optimization
+#| tbl-cap: "Wall-clock parameter optimization run times (seconds) across 500 simulation replicates."
+#| tbl-alt: "Table comparing optimization run times across all twelve estimation model configurations."
+#| echo: false
+#| message: false
+#| warning: false
+
+runtime_opt <- read.csv("../C0/figure/runtime_optimization_summary4.csv")
+knitr::kable(
+  runtime_opt[, c("model", "recorded_runtimes", "median_runtime_sec", "mean_runtime_sec", "min_runtime_sec", "max_runtime_sec")],
+  format = "pipe",
+  col.names = c("Model Configuration", "Replicates", "Median (s)", "Mean (s)", "Min (s)", "Max (s)")
+)
+```
+
+- Uncertainty calculation times differed according to how derived quantities are reported (@tbl-runtime-uncertainty):
+  - FIMS_penalized_MLE computed standard errors via TMB::sdreport in a median of 0.13 seconds, WHAM PML required 0.21 seconds, and Rceattle PML required 0.23 seconds.
+  - For state-space configurations, FIMS uncertainty reporting took a median of 3.56–3.70 seconds, compared to 2.33–2.37 seconds for WHAM and 5.43–5.48 seconds for Rceattle.
+  - In SS3, full uncertainty estimation and file reporting required a median of 17.39 seconds per replicate.
+
+```{r}
+#| label: tbl-runtime-uncertainty
+#| tbl-cap: "Wall-clock run times (seconds) for Hessian inversion and uncertainty reporting (sdreport / covariance evaluation) across 500 simulation replicates."
+#| tbl-alt: "Table comparing uncertainty reporting execution times across all model configurations."
+#| echo: false
+#| message: false
+#| warning: false
+
+runtime_unc <- read.csv("../C0/figure/runtime_uncertainty_reporting_summary.csv")
+knitr::kable(
+  runtime_unc[, c("model", "recorded_runtimes", "median_runtime_sec", "mean_runtime_sec", "min_runtime_sec", "max_runtime_sec")],
+  format = "pipe",
+  col.names = c("Model Configuration", "Replicates", "Median (s)", "Mean (s)", "Min (s)", "Max (s)")
+)
 ```
 
 # Discussion
@@ -235,6 +399,31 @@ knitr::kable(convergence_rates, format = "pipe")
 - Small differences among models likely resulted from implementation details such as recruitment deviation constraints (e.g., sum-to-zero assumptions) and approaches to equilibrium initialization of numbers-at-age (working in progress).
 - {==Random-effects configurations==}{>>Eric: the random effects results could be highlighted a bit more I think (this seems like one of the most interesting / useful results from this comparison!)<<} in both FIMS and WHAM generally reduced bias relative to fixed-effects models. This finding underscores the value of incorporating random effects in stock assessment models. The strong performance of FIMS in this context demonstrates its capability to flexibly implement and estimate random-effects structures.
 - These results support the use of FIMS as a reliable and flexible framework for next-generation fisheries stock assessments while maintaining consistency with existing modeling approaches.
+- Conducting an objective, "apples-to-apples" benchmarking comparison across six assessment programs required standardizing several structural options and numerical settings so that differences in model behavior reflected fundamental framework formulations rather than divergent auxiliary assumptions:
+  - Standardization of Optimizer Loops and Newton Steps in TMB Models. Different TMB-based packages implement varying default convergence protocols in their outer optimization routines. While `FIMS::fit_fims` and `Rceattle::fit_mod` support restart loops (`loopnum` or `number_of_loops`) to re-check gradients after initial convergence, WHAM (`wham::fit_wham`) does not implement an outer loop restart mechanism, relying instead on `nlminb` optimization supplemented by additional Newton steps (`n.newton = 3`) to refine the solution. 
+  - To ensure an equivalent optimization protocol across all three TMB models, we standardized the optimizer controls across frameworks by setting the number of outer loop restarts to zero in the other two models (`number_of_loops = 0` in FIMS; `loopnum = 1` without restarts in Rceattle) and standardizing the number of Newton steps to three across FIMS, Rceattle, and WHAM. This ensured that all three TMB frameworks were evaluated under identical numerical optimization criteria.
+  - Stock-Recruitment Parameterization: Steepness vs. Alpha–Beta. In the operating model and ADMB programs (ASAP, BAM, and SS3), Beverton–Holt recruitment is parameterized using unfished recruitment ($R_0$) and steepness ($h$). In contrast, WHAM and Rceattle parameterize the Beverton–Holt relationship using $\alpha$ and $\beta$ formulation: $$R = \frac{\alpha SSB}{1 + \beta SSB}$$. To align WHAM and Rceattle with the operating model's fixed steepness ($h = 0.75$), we analytically calculated $\alpha$ and $\beta$ from the operating model's true steepness, unfished recruitment ($R_0$), and unfished spawning biomass per recruit ($\phi_0$): $$\alpha = \frac{4h}{\phi_0 (1 - h)}, \quad \beta = \frac{\alpha - 1/\phi_0}{R_0}$$. In WHAM, $\log \alpha$ was fixed to the value implied by the OM steepness (`log_SR_a` mapped to `NA`), estimating only $\beta$. Similarly, in Rceattle, we fixed $\alpha$ to the OM-derived mean while estimating $\beta$. FIMS directly estimates $R_0$ while holding steepness constant at $h = 0.75$. This parameter alignment ensured that all six estimation models shared equivalent underlying spawner–recruit dynamics.
+
+- Population Initialization ($N_1$) and Parameter Dispersion
+Small differences among models in parameter dispersion across simulations (such as the slight difference in `sd_mre` for fishing mortality: 3.05%–3.07% in FIMS vs. 2.95%–2.99% in legacy models) resulted from implementation details regarding equilibrium initialization of numbers-at-age:
+  - Equilibrium Offset (ASAP, BAM, SS3): ADMB models calculate year-1 abundance by applying an equilibrium age structure based on an initial equilibrium fishing mortality rate ($F_1$) combined with initial recruitment deviations or offsets. This structural constraint enforces an equilibrium distribution across age classes that dampens cohort variability across early years.
+  - Free Parameters (FIMS, WHAM, Rceattle): In contrast, FIMS estimates initial numbers-at-age as unconstrained free parameters (`log_init_naa` across all 12 age classes), matching the unconstrained options in WHAM (`N1_model = 0`) and Rceattle (`initMode = 0`). Estimating 12 independent cohort abundances removes equilibrium assumptions and grants the model full flexibility to fit early age compositions, but naturally introduces slightly wider parameter dispersion across stochastic replicates where early cohort observations contain observation error.
+
+- Random-effects configurations in FIMS, WHAM, and Rceattle generally reduced estimation bias relative to penalized fixed-effects models, underscoring the substantial value of incorporating state-space random effects in stock assessment models:
+
+  - In penalized fixed-effects configurations (ASAP, BAM, SS3, FIMS PML, Rceattle PML, and WHAM PML), spawning biomass exhibited a slight negative median relative error (-0.03% to -0.15%), and cumulative 30-year biomass was underestimated by an average of -0.21%. Transitioning to state-space random-effects formulations reduced median biomass bias to within $\pm 0.01\%$ to $+0.04\%$, and reduced cumulative biomass relative error to -0.05%. Integrating over the recruitment process error distribution via the Laplace approximation accounts for the full probability density of lognormal deviations, naturally mitigating the retransformation bias inherent in penalized fixed-effect deviation vectors.
+  - In WHAM and Rceattle, state-space formulations achieved higher convergence rates than their penalized maximum likelihood counterparts (WHAM: 100% vs. 73.0% in PML; Rceattle: 96.2% vs. 87.8% in PML). Under fixed-effects estimation, estimating 29 annual recruitment deviations as independent parameters increases the dimensionality of the gradient vector evaluated by the outer quasi-Newton optimizer (`nlminb`), which can elevate the frequency of saddle-point terminations. Under random effects, these deviations are solved within the inner Laplace approximation, presenting a lower-dimensional, better-conditioned marginal objective function to the outer optimizer.
+  - Across FIMS, WHAM, and Rceattle, estimating the recruitment standard deviation ($\sigma_R$) freely versus fixing it at the operating model's true value yielded nearly identical point estimates, error distributions, and convergence rates. This confirms that modern TMB assessment models can reliably estimate recruitment process variance without compromising trajectory estimation when composition and survey data are informative.
+  - The consistent performance of FIMS across both state-space scenarios demonstrates its capability to flexibly implement, estimate, and integrate random-effects structures.
+
+- While runtime were recorded across all models, direct comparisons of computational run times between ADMB-based executable programs (ASAP, BAM, SS3) and TMB-based R packages (FIMS, WHAM, Rceattle) must be interpreted with caution due to several fundamental architectural differences:
+  - ADMB models run as standalone compiled executables (`.exe`). In simulation benchmarks running on Linux workstation or cluster environments, executing ADMB programs requires compatibility translation layers (e.g., Wine) and extensive disk I/O, writing and parsing intermediate ASCII text files (`.dat`, `.par`, `.rep`, `.std`, `admodel.cov`, `Report.sso`) for every replicate. In contrast, TMB packages execute pre-compiled C++ shared objects directly in memory within the R session, eliminating disk latency.
+  - The computational workload evaluated during optimization differs considerably across frameworks. SS3 evaluates generalized dynamics, age-length keys, and complex penalty functions that are absent in single-purpose models. For uncertainty reporting, SS3 computes full covariance matrices across dozens of derived biological quantities, whereas TMB models evaluate standard errors only for variables explicitly flagged via `ADREPORT()` or requested in `TMB::sdreport`.
+  - In penalized maximum likelihood, TMB models (FIMS PML: 0.19 s; WHAM PML: 0.60 s) were faster than ADMB models because automatic differentiation in CppAD rapidly computes analytic derivatives. However, in state-space configurations, TMB models must repeatedly solve an inner optimization problem to compute the Laplace approximation at every outer iteration. Consequently, state-space run times reflect the computational cost of integrating latent random variables—a functionality not present in classical ADMB statistical catch-at-age models.
+
+- These results support the use of FIMS as a reliable, computationally efficient, and flexible framework for next-generation fisheries stock assessments while maintaining consistency with existing modeling approaches. The modular C++ architecture of FIMS decoupled model configuration from core dynamics, allowing seamless transitions between penalized fixed effects and state-space random effects without altering source code.
+
+- Future benchmark investigations should build upon this baseline evaluation to examine model behavior under more challenging assessment conditions. The multi-model comparison framework developed here provides a reproducible testbed for evaluating these emerging assessment challenges.
 
 # Appendix
 
