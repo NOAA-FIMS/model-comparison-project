@@ -38,35 +38,40 @@ install_required_packages <- function() {
   if (!requireNamespace("pak", quietly = TRUE)) {
     install.packages("pak")
   }
-  pak::pkg_install(
-    c(
-      "readr",
-      "r4ss/r4ss@a5283fc6dbfe46c8d795d0b2995a0c1bdff1a615",
-      "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems",
-      "NOAA-FIMS/FIMS",
-      "timjmiller/wham",
-      # Rceattle is a TMB model, so installing it compiles C++ and needs a
-      # working toolchain. Pinned to a release tag rather than a branch: a
-      # branch moves, and the manuscript's numbers must not move with it.
-      # 4.9.1 is commit 7d873ca7.
-      # "grantdadams/Rceattle@5.64.0", # Tried to use the latest release, but failed with build_srr() settings
-      "grantdadams/Rceattle@4.9.1",
-      # TMBhelper is only in Rceattle's Suggests, so pak will NOT pull it in --
-      # and Rceattle takes a different optimizer path when it is absent
-      # (R/0-tmb_helpers.R), which would make fits depend on what happens to be
-      # installed. Request it explicitly.
-      "kaskr/TMB_contrib_R/TMBhelper",
-      # NOTE: r4ss is not listed here, so read_output_data() cannot read the SS3
-      # output and SS3 is absent from the figures. It now warns rather than
-      # skipping quietly. Adding r4ss changes which simulations survive the
-      # shared outlier filter, so it is left as a separate decision.
-      "httr",
-      "parallel",
-      "doParallel",
-      "googledrive",
-      "gargle"
-    ), 
-    ask = FALSE
+  install.packages("remotes")
+  withr::with_options(
+    list(pkg.sysreqs = FALSE),
+    pak::pkg_install(
+      c(
+        "readr",
+        "cmlegault/ASAPplots",
+        "r4ss/r4ss@a5283fc6dbfe46c8d795d0b2995a0c1bdff1a615",
+        "NOAA-FIMS/Age_Structured_Stock_Assessment_Model_Comparison@update-ems",
+        "NOAA-FIMS/FIMS@4d3cf738af7bb9ada0955fe09fabb9e039870878",
+        "timjmiller/wham",
+        # Rceattle is a TMB model, so installing it compiles C++ and needs a
+        # working toolchain. Pinned to a release tag rather than a branch: a
+        # branch moves, and the manuscript's numbers must not move with it.
+        # 4.9.1 is commit 7d873ca7. 5.67.3 is commit 6dd9136. 
+        "grantdadams/Rceattle@6dd9136341b8473f1f340064a7324ffde74ced70",
+        # "grantdadams/Rceattle@4.9.1",
+        # TMBhelper is only in Rceattle's Suggests, so pak will NOT pull it in --
+        # and Rceattle takes a different optimizer path when it is absent
+        # (R/0-tmb_helpers.R), which would make fits depend on what happens to be
+        # installed. Request it explicitly.
+        "kaskr/TMB_contrib_R/TMBhelper",
+        # NOTE: r4ss is not listed here, so read_output_data() cannot read the SS3
+        # output and SS3 is absent from the figures. It now warns rather than
+        # skipping quietly. Adding r4ss changes which simulations survive the
+        # shared outlier filter, so it is left as a separate decision.
+        "httr",
+        "parallel",
+        "doParallel",
+        "googledrive",
+        "gargle"
+      ), 
+      ask = FALSE
+    )
   )
   
   # Download the EM input files required for the model comparison project, including

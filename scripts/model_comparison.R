@@ -225,3 +225,5 @@ runtime_summary <- check_runtime(
   n_sim = sim_input[["om_sim_num"]],
   case_dir = "C0"
 )
+
+saveRDS(runtime, file = "total_runtime.RDs")

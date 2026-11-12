@@ -1,0 +1,13 @@
+"model","total_simulations","recorded_runtimes","mean_runtime_sec","median_runtime_sec","min_runtime_sec","max_runtime_sec"
+"ASAP",500,500,1.66,1.7,0.7,2.09
+"BAM",500,500,0.97,0.99,0,1.65
+"SS3",500,500,17.14,17.52,10.07,20.51
+"FIMS_penalized_MLE",500,500,0.16,0.15,0.03,0.42
+"FIMS_state_space_unknown_sigmaR",500,500,4.08,3.93,0.94,12.61
+"FIMS_state_space_known_sigmaR",500,500,3.91,3.71,0.88,10.52
+"Rceattle_penalized_MLE",500,496,0.25,0.22,0.07,1
+"Rceattle_state_space_unknown_sigmaR",500,496,4.52,4.41,2.18,10.77
+"Rceattle_state_space_known_sigmaR",500,496,4.37,4.23,1.9,10.35
+"WHAM_penalized_MLE",500,500,0.14,0.14,0.07,0.32
+"WHAM_state_space_unknown_sigmaR",500,500,2.62,2.48,2.05,6.14
+"WHAM_state_space_known_sigmaR",500,500,2.54,2.43,1.96,6.08
